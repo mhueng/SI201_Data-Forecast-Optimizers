@@ -85,3 +85,16 @@ def store_air_quality(city_names, api_key, db_name = 'weather_data.db'):
             conn.commit()
             stored_count += 1
             print(f'Stored air quality data for {city}: AQI = {aqi_value}')
+            
+            time.sleep(0.5)
+            
+        except requests.execptions.RequestException as e:
+            print(f"Error fetching data for {city}: {e}")
+            continue
+        except KeyError as e:
+            print(f"Error parsing data for {city}: Missing key {e}")
+            continue
+        
+        conn.close()
+        print(f"\nTotal cities stored this run: {stored_count}")
+        return stored_count
