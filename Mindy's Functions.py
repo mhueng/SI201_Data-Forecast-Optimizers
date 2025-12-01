@@ -98,3 +98,13 @@ def store_air_quality(city_names, api_key, db_name = 'weather_data.db'):
         conn.close()
         print(f"\nTotal cities stored this run: {stored_count}")
         return stored_count
+    
+if __name__ == "__main__":
+    # List of 25 cities (you'll need to expand this)
+    cities = [
+        "New York", "Los Angeles", "Chicago", "Houston", "Phoenix",
+        "Philadelphia", "San Antonio", "San Diego", "Dallas", "Austin",
+        "Jacksonville", "Fort Worth", "Columbus", "Charlotte", "Indianapolis",
+        "San Francisco", "Seattle", "Denver", "Boston", "Nashville",
+        "Detroit", "Portland", "Las Vegas", "Memphis", "Louisville"
+    ]
