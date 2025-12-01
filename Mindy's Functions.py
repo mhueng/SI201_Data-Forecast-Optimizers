@@ -88,7 +88,7 @@ def store_air_quality(city_names, api_key, db_name = 'weather_data.db'):
             
             time.sleep(0.5)
             
-        except requests.execptions.RequestException as e:
+        except requests.exceptions.RequestException as e:
             print(f"Error fetching data for {city}: {e}")
             continue
         except KeyError as e:
@@ -98,9 +98,16 @@ def store_air_quality(city_names, api_key, db_name = 'weather_data.db'):
         conn.close()
         print(f"\nTotal cities stored this run: {stored_count}")
         return stored_count
+
+def calculate_avg_aqi(conn, city_id= None):
+    cur = conn.cursor()
     
+    with open('calulations_output.txt', 'a') as f:
+        f.write("\n" + "="*50 + "\n")
+        f.write("AVERAGE AQI CALCULATION\n")
+        f.write("="*50 + "\n\n")
+       
 if __name__ == "__main__":
-    # List of 25 cities (you'll need to expand this)
     cities = [
         "New York", "Los Angeles", "Chicago", "Houston", "Phoenix",
         "Philadelphia", "San Antonio", "San Diego", "Dallas", "Austin",
@@ -108,3 +115,8 @@ if __name__ == "__main__":
         "San Francisco", "Seattle", "Denver", "Boston", "Nashville",
         "Detroit", "Portland", "Las Vegas", "Memphis", "Louisville"
     ]
+    
+API_KEY = "0e6637b961c84282bb704311250112"
+
+count = store_air_quality(cities, API_KEY)
+print(f"Successfully stored data for {count} cities")
