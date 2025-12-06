@@ -5,39 +5,44 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
-def load_config(config_file='config.json'):
-    """Loads configuration from JSON file."""
+
+# ============================================================================
+# API KEY LOADER FUNCTION
+# ============================================================================
+
+def get_api_key(filename):
+    '''
+    loads in API key from file 
+
+    ARGUMENTS:  
+        filename: file that contains your API key
+    
+    RETURNS:
+        your API key
+    '''
     try:
-        with open(config_file, 'r') as f:
-            config = json.load(f)
-        return config
-    except FileNotFoundError:
-        print(f"ERROR: Configuration file '{config_file}' not found!")
-        print("Please create a config.json file with your API keys and URLs.")
-        exit(1)
-    except json.JSONDecodeError:
-        print(f"ERROR: Invalid JSON format in '{config_file}'")
-        exit(1)
-
-# Load configuration
-CONFIG = load_config()
-
-# Extract values from config
-OPENWEATHER_API_KEY = CONFIG['api_keys']['openweather']
-OPENUV_API_KEY = CONFIG['api_keys']['openuv']
-WEATHERAPI_KEY = CONFIG['api_keys']['weatherapi']
-
-OPENWEATHER_BASE_URL = CONFIG['api_urls']['openweather_base']
-OPENUV_BASE_URL = CONFIG['api_urls']['openuv_base']
-WEATHERAPI_BASE_URL = CONFIG['api_urls']['weatherapi_base']
-
-DB_NAME = CONFIG['database']['db_name']
-OUTPUT_FILE = CONFIG['database']['output_file']
+        with open(filename, 'r') as f:
+            return f.read().strip()
+    except:
+        return None
 
 # ============================================================================
 # CONSTANTS AND CONFIGURATION
 # ============================================================================
 
+# Load API keys from text files
+OPENWEATHER_API_KEY = get_api_key('openweather_api_key.txt')
+OPENUV_API_KEY = get_api_key('openuv_api_key.txt')
+WEATHERAPI_KEY = get_api_key('weatherapi_api_key.txt')
+
+# API URLs
+OPENWEATHER_BASE_URL = 'http://api.openweathermap.org/data/2.5/weather'
+OPENUV_BASE_URL = 'https://api.openuv.io/api/v1/uv'
+WEATHERAPI_BASE_URL = 'http://api.weatherapi.com/v1/current.json'
+
+# Database settings
+DB_NAME = 'weather_data.db'
+OUTPUT_FILE = 'calculations_output.txt'
 
 # Cities list (25 cities)
 CITIES = [
@@ -678,9 +683,7 @@ def get_calculated_data(db_conn):
         'avg_aqi': avg_aqis
     }
 
-# ============================================================================
 # VISUALIZATION FUNCTIONS - EVERYONE
-# ============================================================================
 
 def create_safety_ranking_chart(calculated_data):
     """Creates ranked bar chart of top 10 safest cities."""
