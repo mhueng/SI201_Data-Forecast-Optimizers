@@ -163,6 +163,7 @@ def calculate_avg_aqi(conn, city_id= None):
             f.write(f"Data points: {count}\n")
             
             print(f"{city_name}: Average AQI = {avg_aqi:.2f} (from {count} measurements)")
+            print("Hello World")
             
             return avg_aqi
         
