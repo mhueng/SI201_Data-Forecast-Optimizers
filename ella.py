@@ -22,7 +22,7 @@ def store_weather(city_list, api_key):
     conn = sqlite3.connect('weather_data.db')
     cur = conn.cursor()
     
-    # Create Cities table if it doesn't exist
+    # Create Cities table if it doesn't existå
     cur.execute('''CREATE TABLE IF NOT EXISTS Cities (
                     city_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     city_name TEXT UNIQUE,
