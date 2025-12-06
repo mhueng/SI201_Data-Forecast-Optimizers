@@ -5,25 +5,39 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
+def load_config(config_file='config.json'):
+    """Loads configuration from JSON file."""
+    try:
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+        return config
+    except FileNotFoundError:
+        print(f"ERROR: Configuration file '{config_file}' not found!")
+        print("Please create a config.json file with your API keys and URLs.")
+        exit(1)
+    except json.JSONDecodeError:
+        print(f"ERROR: Invalid JSON format in '{config_file}'")
+        exit(1)
 
+# Load configuration
+CONFIG = load_config()
+
+# Extract values from config
+OPENWEATHER_API_KEY = CONFIG['api_keys']['openweather']
+OPENUV_API_KEY = CONFIG['api_keys']['openuv']
+WEATHERAPI_KEY = CONFIG['api_keys']['weatherapi']
+
+OPENWEATHER_BASE_URL = CONFIG['api_urls']['openweather_base']
+OPENUV_BASE_URL = CONFIG['api_urls']['openuv_base']
+WEATHERAPI_BASE_URL = CONFIG['api_urls']['weatherapi_base']
+
+DB_NAME = CONFIG['database']['db_name']
+OUTPUT_FILE = CONFIG['database']['output_file']
 
 # ============================================================================
 # CONSTANTS AND CONFIGURATION
 # ============================================================================
 
-# API Keys
-OPENWEATHER_API_KEY = "d2b6933ae0a235dbdb6209f0ac09cb8e"
-OPENUV_API_KEY = "openuv-ac490wrminnpcmb-io"
-WEATHERAPI_KEY = "0e6637b961c84282bb704311250112"
-
-# API Base URLs
-OPENWEATHER_BASE_URL = "http://api.openweathermap.org/data/2.5/weather"
-OPENUV_BASE_URL = "https://api.openuv.io/api/v1/uv"
-WEATHERAPI_BASE_URL = "http://api.weatherapi.com/v1/current.json"
-
-# Database
-DB_NAME = "weather_data.db"
-OUTPUT_FILE = "calculations_output.txt"
 
 # Cities list (25 cities)
 CITIES = [
