@@ -2,26 +2,18 @@ import requests
 import sqlite3
 import time
 
-def store_weather(city_list, api_key):
-    """
-    Fetches batched weather data for up to 25 cities and inserts normalized rows 
-    into the Weather_Data table without duplicates.
-    
-    Input: 
-        - city_list: List of 25 city names (strings)
-        - api_key: OpenWeatherMap API key (string)
-    Output: 
-        - Stores weather data in database
-        - Returns count of stored cities (integer)
-    """
-    # Enforce maximum of 25 cities
-    if len(city_list) > 25:
-        print(f"Warning: List contains {len(city_list)} cities. Limiting to first 25.")
-        city_list = city_list[:25]
-    
-    conn = sqlite3.connect('weather_data.db')
+def store_weather(city_names, api_key, db_name='weather_data.db'):
+    conn = sqlite3.connect(db_name)
     cur = conn.cursor()
+
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Cities (
+            city_id INTEGER PRIMARY KEY,
+            city_name TEXT UNIQUE
+        )
+    ''')
     
+<<<<<<< HEAD
     # Create Cities table if it doesn't existå
     cur.execute('''CREATE TABLE IF NOT EXISTS Cities (
                     city_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,178 +21,212 @@ def store_weather(city_list, api_key):
                     latitude REAL,
                     longitude REAL
                 )''')
-    
-    # Create Weather_Data table if it doesn't exist
-    cur.execute('''CREATE TABLE IF NOT EXISTS Weather_Data (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    city_id INTEGER,
-                    temperature REAL,
-                    weather_condition TEXT,
-                    timestamp INTEGER,
-                    FOREIGN KEY (city_id) REFERENCES Cities(city_id),
-                    UNIQUE(city_id, timestamp)
-                )''')
-    
-    # City coordinates (latitude, longitude)
-    city_coordinates = {
-        "New York": (40.7128, -74.0060),
-        "Los Angeles": (34.0522, -118.2437),
-        "Chicago": (41.8781, -87.6298),
-        "Houston": (29.7604, -95.3698),
-        "Phoenix": (33.4484, -112.0740),
-        "Philadelphia": (39.9526, -75.1652),
-        "San Antonio": (29.4241, -98.4936),
-        "San Diego": (32.7157, -117.1611),
-        "Dallas": (32.7767, -96.7970),
-        "Austin": (30.2672, -97.7431),
-        "Jacksonville": (30.3322, -81.6557),
-        "Fort Worth": (32.7555, -97.3308),
-        "Charlotte": (35.2271, -80.8431),
-        "Seattle": (47.6062, -122.3321),
-        "Denver": (39.7392, -104.9903),
-        "Boston": (42.3601, -71.0589),
-        "Portland": (45.5152, -122.6784),
-        "Las Vegas": (36.1699, -115.1398),
-        "Miami": (25.7617, -80.1918),
-        "Atlanta": (33.7490, -84.3880),
-        "Nashville": (36.1627, -86.7816),
-        "Detroit": (42.3314, -83.0458),
-        "Baltimore": (39.2904, -76.6122),
-        "Minneapolis": (44.9778, -93.2650),
-        "Tampa": (27.9506, -82.4572)
-    }
-    
-    stored_count = 0
-    
-    for city_name in city_list:
-        try:
-            # Get coordinates for the city
-            if city_name not in city_coordinates:
-                print(f"✗ Coordinates not found for {city_name}")
-                continue
-            
-            lat, lon = city_coordinates[city_name]
-            
-            # Insert or get city_id (normalized - no duplicates)
-            cur.execute('INSERT OR IGNORE INTO Cities (city_name, latitude, longitude) VALUES (?, ?, ?)',
-                       (city_name, lat, lon))
-            cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city_name,))
-            city_id = cur.fetchone()[0]
-            
-            # Fetch weather data from API
-            url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric"
-            response = requests.get(url)
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                # Extract relevant data
-                temperature = data['main']['temp']
-                weather_condition = data['weather'][0]['main']
-                timestamp = data['dt']
-                
-                # Insert normalized row (UNIQUE constraint prevents duplicates)
-                try:
-                    cur.execute('''INSERT INTO Weather_Data 
-                                  (city_id, temperature, weather_condition, timestamp) 
-                                  VALUES (?, ?, ?, ?)''',
-                               (city_id, temperature, weather_condition, timestamp))
-                    stored_count += 1
-                    print(f"✓ Stored weather data for {city_name}")
-                except sqlite3.IntegrityError:
-                    print(f"⊙ Duplicate entry for {city_name} at timestamp {timestamp} - skipped")
-                
-            else:
-                print(f"✗ Failed to fetch data for {city_name}: {response.status_code}")
-            
-            # Small delay to respect API rate limits
-            time.sleep(0.5)
-            
-        except Exception as e:
-            print(f"✗ Error processing {city_name}: {str(e)}")
+=======
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Weather_Data (
+            id INTEGER PRIMARY KEY,
+            city_id INTEGER,
+            temperature REAL,
+            weather_condition TEXT,
+            timestamp TEXT,
+            FOREIGN KEY (city_id) REFERENCES Cities(city_id)
+        )
+    ''')
+>>>>>>> b86a995916d716e1cb8123a7b2b1eed490139ffe
     
     conn.commit()
-    conn.close()
     
-    print(f"\nTotal cities stored: {stored_count}/{len(city_list)}")
-    return stored_count
-
-
-def calculate_avg_temp(db_connection, city_id=None):
-    """
-    Computes the average temperature per city from the database and appends 
-    the result to calculations_output.txt.
+    store_count = 0
+    max_stores = 25
     
-    Input:
-        - db_connection: sqlite3 database connection object
-        - city_id: Specific city ID to calculate for, or None for all cities (integer or None)
-    Output:
-        - Average temperature (float), writes to calculations_output.txt
-    """
-    cur = db_connection.cursor()
+    base_url = "http://api.openweathermap.org/data/2.5/weather"
     
-    if city_id is None:
-        # Calculate average for all cities
-        cur.execute('''SELECT Cities.city_name, AVG(Weather_Data.temperature) as avg_temp
-                      FROM Weather_Data
-                      JOIN Cities ON Weather_Data.city_id = Cities.city_id
-                      GROUP BY Cities.city_id, Cities.city_name
-                      ORDER BY Cities.city_name''')
-        results = cur.fetchall()
+    for city in city_names:
+        if store_count >= max_stores:
+            print(f"Reached limit of {max_stores} cities per run")
+            break
         
-        # Append to output file
-        with open('calculations_output.txt', 'a') as f:
-            f.write("\n=== AVERAGE TEMPERATURE BY CITY ===\n")
-            for city_name, avg_temp in results:
-                f.write(f"{city_name}: {avg_temp:.2f}°C\n")
-        
-        # Return overall average
-        cur.execute('SELECT AVG(temperature) FROM Weather_Data')
-        overall_avg = cur.fetchone()[0]
-        
-        print(f"Average temperatures calculated and written to calculations_output.txt")
-        return overall_avg if overall_avg else 0.0
-        
-    else:
-        # Calculate average for specific city
-        cur.execute('''SELECT Cities.city_name, AVG(Weather_Data.temperature) as avg_temp
-                      FROM Weather_Data
-                      JOIN Cities ON Weather_Data.city_id = Cities.city_id
-                      WHERE Cities.city_id = ?
-                      GROUP BY Cities.city_id''', (city_id,))
-        result = cur.fetchone()
-        
-        if result:
-            city_name, avg_temp = result
-            with open('calculations_output.txt', 'a') as f:
-                f.write(f"\nAverage temperature for {city_name}: {avg_temp:.2f}°C\n")
+        try:
+            cur.execute('''
+                SELECT COUNT(*) FROM Weather_Data
+                JOIN Cities ON Weather_Data.city_id = Cities.city_id
+                WHERE Cities.city_name = ? AND DATE(timestamp) = DATE('now')
+            ''', (city,))
             
-            print(f"Average temperature for {city_name} written to calculations_output.txt")
-            return avg_temp
+            if cur.fetchone()[0] > 0:
+                print(f"Weather data for {city} already exists for today, skipping...")
+                continue
+            
+            params = {
+                'q': city,
+                'appid': api_key,
+                'units': 'imperial'  
+            }
+            
+            response = requests.get(base_url, params=params)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            temperature = data['main']['temp']
+            weather_condition = data['weather'][0]['main']
+            
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city,))
+            result = cur.fetchone()
+            
+            if result:
+                city_id = result[0]
+            else:
+                cur.execute('SELECT MAX(city_id) FROM Cities')
+                max_id = cur.fetchone()[0]
+                city_id = 1 if max_id is None else max_id + 1
+                cur.execute('INSERT INTO Cities (city_id, city_name) VALUES (?, ?)', 
+                           (city_id, city))
+            
+            cur.execute('SELECT MAX(id) FROM Weather_Data')
+            max_id = cur.fetchone()[0]
+            weather_id = 1 if max_id is None else max_id + 1
+            
+            cur.execute('''
+                INSERT INTO Weather_Data (id, city_id, temperature, weather_condition, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (weather_id, city_id, temperature, weather_condition, timestamp))
+            
+            conn.commit()
+            store_count += 1
+            print(f'Stored weather data for {city}: Temp = {temperature}°F, Condition = {weather_condition}')
+            
+            time.sleep(0.5)
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching data for {city}: {e}")
+            continue
+        except KeyError as e:
+            print(f"Error parsing data for {city}: Missing key {e}")
+            continue
+        except Exception as e:
+            print(f"Unexpected error for {city}: {e}")
+            continue
+    
+    conn.close()
+    print(f"\nTotal cities stored this run: {store_count}")
+    return store_count
+
+
+def calculate_avg_temp(conn, city_id=None):
+    
+    cur = conn.cursor()
+    
+    with open('calculations_output.txt', 'a') as f:
+        f.write("\n" + "="*50 + "\n")
+        f.write("AVERAGE TEMPERATURE CALCULATIONS\n")
+        f.write("="*50 + "\n\n")
+        
+        if city_id is None:
+            # Calculate average temperature for all cities
+            cur.execute('''
+                SELECT Cities.city_name, AVG(Weather_Data.temperature) as avg_temp
+                FROM Weather_Data
+                JOIN Cities ON Weather_Data.city_id = Cities.city_id
+                GROUP BY Cities.city_id, Cities.city_name
+                ORDER BY avg_temp DESC
+            ''')
+            
+            results = cur.fetchall()
+            
+            if not results:
+                print("No weather data found in database")
+                f.write("No weather data found in database\n")
+                return None
+            
+            cur.execute('SELECT AVG(temperature) FROM Weather_Data')
+            overall_avg = cur.fetchone()[0]
+            
+            f.write(f"Overall Average Temperature: {overall_avg:.2f}°F\n\n")
+            f.write("Average Temperature by City:\n")
+            f.write("-" * 40 + "\n")
+            
+            for city_name, avg_temp in results:
+                f.write(f"{city_name:25s}: {avg_temp:.2f}°F\n")
+                print(f"{city_name}: Average Temperature = {avg_temp:.2f}°F")
+            
+            return overall_avg
+            
         else:
-            print(f"No data found for city_id {city_id}")
-            return 0.0
+            cur.execute('''
+                SELECT Cities.city_name, AVG(Weather_Data.temperature) as avg_temp
+                FROM Weather_Data
+                JOIN Cities ON Weather_Data.city_id = Cities.city_id
+                WHERE Cities.city_id = ?
+                GROUP BY Cities.city_id, Cities.city_name
+            ''', (city_id,))
+            
+            result = cur.fetchone()
+            
+            if not result:
+                print(f"No weather data found for city_id {city_id}")
+                f.write(f"No weather data found for city_id {city_id}\n")
+                return None
+            
+            city_name, avg_temp = result
+            
+            f.write(f"City: {city_name}\n")
+            f.write(f"Average Temperature: {avg_temp:.2f}°F\n")
+            
+            cur.execute('''
+                SELECT COUNT(*) FROM Weather_Data 
+                WHERE city_id = ?
+            ''', (city_id,))
+            count = cur.fetchone()[0]
+            
+            f.write(f"Data points: {count}\n")
+            
+            print(f"{city_name}: Average Temperature = {avg_temp:.2f}°F (from {count} measurements)")
+            
+            return avg_temp
 
 
-# Example usage
+def get_temp_comfort_level(temp_fahrenheit):
+    if temp_fahrenheit < 32:
+        return "Freezing"
+    elif 32 <= temp_fahrenheit < 50:
+        return "Cold"
+    elif 50 <= temp_fahrenheit < 65:
+        return "Cool"
+    elif 65 <= temp_fahrenheit < 75:
+        return "Comfortable"
+    elif 75 <= temp_fahrenheit < 85:
+        return "Warm"
+    elif 85 <= temp_fahrenheit < 95:
+        return "Hot"
+    else:
+        return "Very Hot"
+
+
 if __name__ == "__main__":
-    # List of 25 city names
     cities = [
         "New York", "Los Angeles", "Chicago", "Houston", "Phoenix",
         "Philadelphia", "San Antonio", "San Diego", "Dallas", "Austin",
-        "Jacksonville", "Fort Worth", "Charlotte", "Seattle", "Denver",
-        "Boston", "Portland", "Las Vegas", "Miami", "Atlanta",
-        "Nashville", "Detroit", "Baltimore", "Minneapolis", "Tampa"
+        "Jacksonville", "Fort Worth", "Columbus", "Charlotte", "Indianapolis",
+        "San Francisco", "Seattle", "Denver", "Boston", "Nashville",
+        "Detroit", "Portland", "Las Vegas", "Memphis", "Louisville"
     ]
     
-    # Your API key
+    # Replace with your OpenWeatherMap API key
     API_KEY = "d2b6933ae0a235dbdb6209f0ac09cb8e"
     
-    # Store weather data for all 25 cities
+    # Run the storage function
     count = store_weather(cities, API_KEY)
+    print(f"Successfully stored data for {count} cities")
     
-    # Calculate average temperatures
-    conn = sqlite3.connect('weather_data.db')
-    avg_temp = calculate_avg_temp(conn, city_id=None)
-    print(f"\nOverall average temperature: {avg_temp:.2f}°C")
-    conn.close()
+    # After running storage multiple times to get 100+ entries,
+    # you can run the calculation function:
+    # conn = sqlite3.connect('weather_data.db')
+    # overall_avg = calculate_avg_temp(conn, city_id=None)
+    # if overall_avg:
+    #     comfort = get_temp_comfort_level(overall_avg)
+    #     print(f"\nOverall temperature comfort: {comfort}")
+    # conn.close()
