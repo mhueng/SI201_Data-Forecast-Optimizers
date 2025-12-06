@@ -29,7 +29,6 @@ def store_uv(city_names, api_key, city_coordinates, db_name='weather_data.db'):
     conn = sqlite3.connect(db_name)
     cur = conn.cursor()
     
-    # Create Cities table (shared with other team members)
     cur.execute('''
                 CREATE TABLE IF NOT EXISTS Cities (
                     city_id INTEGER PRIMARY KEY,
@@ -37,7 +36,6 @@ def store_uv(city_names, api_key, city_coordinates, db_name='weather_data.db'):
                     )
                     ''')
     
-    # Create UV_Data table
     cur.execute('''
                 CREATE TABLE IF NOT EXISTS UV_Data (
                     id INTEGER PRIMARY KEY,
@@ -61,7 +59,6 @@ def store_uv(city_names, api_key, city_coordinates, db_name='weather_data.db'):
             break
         
         try:
-            # Check if UV data already exists for this city today
             cur.execute('''
                         SELECT COUNT(*) FROM UV_Data
                         JOIN Cities ON UV_Data.city_id = Cities.city_id
@@ -72,35 +69,29 @@ def store_uv(city_names, api_key, city_coordinates, db_name='weather_data.db'):
                 print(f"UV data for {city} already exists for today, skipping...")
                 continue
             
-            # Check if coordinates are available
             if city not in city_coordinates:
                 print(f"Coordinates not found for {city}, skipping...")
                 continue
             
             lat, lon = city_coordinates[city]
             
-            # Set up API request headers
             headers = {
                 'x-access-token': api_key
             }
             
-            # Set up API request parameters
             params = {
                 'lat': lat,
                 'lng': lon
             }
             
-            # Fetch UV data from OpenUV API
             response = requests.get(base_url, headers=headers, params=params)
             response.raise_for_status()
             
             data = response.json()
             
-            # Extract UV index and timestamp from API response
             uv_index = data['result']['uv']
             timestamp = data['result']['uv_time']
             
-            # Get or create city_id
             cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city,))
             result = cur.fetchone()
             
@@ -112,12 +103,10 @@ def store_uv(city_names, api_key, city_coordinates, db_name='weather_data.db'):
                 city_id = 1 if max_id is None else max_id + 1
                 cur.execute('INSERT INTO Cities (city_id, city_name) VALUES (?, ?)', (city_id, city))
             
-            # Get next available id for UV_Data
             cur.execute('SELECT MAX(id) FROM UV_Data')
             max_id = cur.fetchone()[0]
             uv_id = 1 if max_id is None else max_id + 1
             
-            # Insert UV data into database
             cur.execute('''
                         INSERT INTO UV_Data (id, city_id, uv_index, timestamp)
                         VALUES (?, ?, ?, ?)
@@ -127,7 +116,6 @@ def store_uv(city_names, api_key, city_coordinates, db_name='weather_data.db'):
             stored_count += 1
             print(f'Stored UV data for {city}: UV Index = {uv_index}')
             
-            # Rate limiting to be respectful to API
             time.sleep(0.5)
             
         except requests.exceptions.RequestException as e:
@@ -157,7 +145,6 @@ def calculate_avg_uv(conn, city_id=None):
     cur = conn.cursor()
     
     if city_id is None:
-        # Calculate average UV index for all cities
         cur.execute('''
                     SELECT Cities.city_name, AVG(UV_Data.uv_index) as avg_uv
                     FROM UV_Data
@@ -167,7 +154,6 @@ def calculate_avg_uv(conn, city_id=None):
                     ''')
         results = cur.fetchall()
         
-        # Write to output file
         with open('calculations_output.txt', 'a') as f:
             f.write("\n" + "="*50 + "\n")
             f.write("AVERAGE UV INDEX BY CITY\n")
@@ -179,13 +165,11 @@ def calculate_avg_uv(conn, city_id=None):
         for city_name, avg_uv in results:
             print(f"{city_name}: {avg_uv:.2f}")
         
-        # Return overall average across all cities
         cur.execute('SELECT AVG(uv_index) FROM UV_Data')
         overall_avg = cur.fetchone()[0]
         return overall_avg if overall_avg else 0.0
     
     else:
-        # Calculate average UV index for specific city
         cur.execute('''
                     SELECT AVG(uv_index)
                     FROM UV_Data
@@ -193,11 +177,9 @@ def calculate_avg_uv(conn, city_id=None):
                     ''', (city_id,))
         avg_uv = cur.fetchone()[0]
         
-        # Get city name
         cur.execute('SELECT city_name FROM Cities WHERE city_id = ?', (city_id,))
         city_name = cur.fetchone()[0]
         
-        # Write to output file
         with open('calculations_output.txt', 'a') as f:
             f.write(f"\nAverage UV Index for {city_name}: {avg_uv:.2f}\n")
         
@@ -207,7 +189,6 @@ def calculate_avg_uv(conn, city_id=None):
 
 
 if __name__ == "__main__":
-    # List of 25 cities for the 4-day June data collection period
     cities = [
         "New York", "Los Angeles", "Chicago", "Houston", "Phoenix",
         "Philadelphia", "San Antonio", "San Diego", "Dallas", "Austin",
@@ -216,7 +197,6 @@ if __name__ == "__main__":
         "Detroit", "Portland", "Las Vegas", "Memphis", "Louisville"
     ]
     
-    # City coordinates dictionary (latitude, longitude)
     city_coordinates = {
         "New York": (40.7128, -74.0060),
         "Los Angeles": (34.0522, -118.2437),
@@ -245,8 +225,6 @@ if __name__ == "__main__":
         "Louisville": (38.2527, -85.7585)
     }
     
-    # STEP 1: Store UV data (run this multiple times to collect data over 4 days)
-    # Replace with your actual OpenUV API key
     api_key = "openuv-ac490wrminnpcmb-io"
 
     
