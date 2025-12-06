@@ -106,7 +106,82 @@ def calculate_avg_aqi(conn, city_id= None):
         f.write("\n" + "="*50 + "\n")
         f.write("AVERAGE AQI CALCULATION\n")
         f.write("="*50 + "\n\n")
-       
+        
+        if city_id is None:
+            cur.execute('''
+                        SELECT Cities.city_name, AVG(Air_Quality_Data.aqi_value) as avg_aqi
+                        FROM Air_Quality_Data
+                        JOIN Cities ON Air_Quality_Data.city_id = Cities.city_id
+                        GROUP BY Cities.city_id, Cities.city_name
+                        ORDER BY avg_aqi
+                        ''')
+            results = cur.fetchall()
+            
+            if not results:
+                print('No air quality data found in database')
+                f.write('No air quality data found in database\n')
+                return None
+            
+            cur.execute('SELECT AVG(aqi_value) FROM Air_Quality_Data')
+            overall_avg = cur.fetchone()[0]
+            f.write(f"Overall Average AQI: {overall_avg:.2f}\n\n")
+            f.write("Average AQI by City:\n")
+            f.write("-" *40 +"\n")
+            
+            for city_name, avg_aqi in results:
+                f.write(f"{city_name:25s}: {avg_aqi:.2f}")
+            
+            return overall_avg
+        
+        else:
+            cur.execute('''
+                SELECT Cities.city_name, AVG(Air_Quality_Data.aqi_value) as avg_aqi
+                FROM Air_Quality_Data
+                JOIN Cities ON Air_Quality_Data.city_id = Cities.city_id
+                WHERE Cities.city_id = ?
+                GROUP BY Cities.city_id, Cities.city_name
+            ''', (city_id,))
+            
+            result = cur.fetchone()
+            
+            if not result:
+                print(f"No air quality data found for city_id{city_id}")
+                f.write(f"No air quality data found for city_id{city_id}\n")
+                return None
+            
+            city_name, avg_aqi = result
+            
+            f.write(f"City: {city_name}\n")
+            f.write(f"Average AQI: {avg_aqi:.2f}\n")
+            
+            cur.execute('''
+                        SELECT COUNT(*) FROM Air_Quality_Data 
+                        WHERE city_id = ?
+                        ''', (city_id,))
+            count = cur.fetchone()[0]
+            
+            f.write(f"Data points: {count}\n")
+            
+            print(f"{city_name}: Average AQI = {avg_aqi:.2f} (from {count} measurements)")
+            
+            return avg_aqi
+        
+def get_api_interpretation(aqi_value):
+    if aqi_value == 1:
+        return "Good"
+    elif aqi_value == 2:
+        return "Moderate"
+    elif aqi_value == 3:
+        return "Unhealty for Sensitive Groups"
+    elif aqi_value == 4:
+        return "Unhealthy"
+    elif aqi_value == 5:
+        return "Very Unhealthy"
+    elif aqi_value == 6:
+        return "Hazardous"
+    else:
+        return "Unknown"
+    
 if __name__ == "__main__":
     cities = [
         "New York", "Los Angeles", "Chicago", "Houston", "Phoenix",
