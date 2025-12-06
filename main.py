@@ -11,14 +11,14 @@ import numpy as np
 # ============================================================================
 
 # API Keys
-OPENWEATHER_API_KEY = "your_key_here"
-OPENUV_API_KEY = "your_key_here"
-WEATHERAPI_KEY = "your_key_here"
+OPENWEATHER_API_KEY = "d2b6933ae0a235dbdb6209f0ac09cb8e"
+OPENUV_API_KEY = "openuv-ac490wrminnpcmb-io"
+WEATHERAPI_KEY = "0e6637b961c84282bb704311250112"
 
 # API Base URLs
-OPENWEATHER_BASE_URL = "..."
-OPENUV_BASE_URL = "..."
-WEATHERAPI_BASE_URL = "..."
+OPENWEATHER_BASE_URL = "http://api.openweathermap.org/data/2.5/weather"
+OPENUV_BASE_URL = "https://api.openuv.io/api/v1/uv"
+WEATHERAPI_BASE_URL = "http://api.weatherapi.com/v1/current.json"
 
 # Database
 DB_NAME = "weather_data.db"
@@ -26,12 +26,40 @@ OUTPUT_FILE = "calculations_output.txt"
 
 # Cities list (25 cities)
 CITIES = [
-    # List of city names
+    "New York", "Los Angeles", "Chicago", "Houston", "Phoenix",
+    "Philadelphia", "San Antonio", "San Diego", "Dallas", "Austin",
+    "Jacksonville", "Fort Worth", "Columbus", "Charlotte", "Indianapolis",
+    "San Francisco", "Seattle", "Denver", "Boston", "Nashville",
+    "Detroit", "Portland", "Las Vegas", "Memphis", "Louisville"
 ]
 
 # City coordinates for UV API (latitude, longitude)
 CITY_COORDS = {
-    # "City Name": (lat, lon),
+    "New York": (40.7128, -74.0060),
+    "Los Angeles": (34.0522, -118.2437),
+    "Chicago": (41.8781, -87.6298),
+    "Houston": (29.7604, -95.3698),
+    "Phoenix": (33.4484, -112.0740),
+    "Philadelphia": (39.9526, -75.1652),
+    "San Antonio": (29.4241, -98.4936),
+    "San Diego": (32.7157, -117.1611),
+    "Dallas": (32.7767, -96.7970),
+    "Austin": (30.2672, -97.7431),
+    "Jacksonville": (30.3322, -81.6557),
+    "Fort Worth": (32.7555, -97.3308),
+    "Columbus": (39.9612, -82.9988),
+    "Charlotte": (35.2271, -80.8431),
+    "Indianapolis": (39.7684, -86.1581),
+    "San Francisco": (37.7749, -122.4194),
+    "Seattle": (47.6062, -122.3321),
+    "Denver": (39.7392, -104.9903),
+    "Boston": (42.3601, -71.0589),
+    "Nashville": (36.1627, -86.7816),
+    "Detroit": (42.3314, -83.0458),
+    "Portland": (45.5152, -122.6784),
+    "Las Vegas": (36.1699, -115.1398),
+    "Memphis": (35.1495, -90.0490),
+    "Louisville": (38.2527, -85.7585)
 }
 
 
@@ -40,190 +68,451 @@ CITY_COORDS = {
 # ============================================================================
 
 def init_database():
-    """
-    Initializes the database and creates all necessary tables.
+    """Initializes the database and creates all necessary tables."""
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
     
-    Input: None
-    Output: None (creates database file and tables)
+    # Cities table
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Cities (
+            city_id INTEGER PRIMARY KEY,
+            city_name TEXT UNIQUE
+        )
+    ''')
     
-    Tables created:
-    - Cities: city_id (PK), city_name
-    - Weather_Data: id (PK), city_id (FK), temperature, weather_condition, timestamp
-    - UV_Data: id (PK), city_id (FK), uv_index, timestamp
-    - Air_Quality_Data: id (PK), city_id (FK), aqi_value, timestamp
-    """
-    pass
-
-
-def get_or_create_city_id(cursor, city_name):
-    """
-    Gets existing city_id or creates new city entry.
+    # Weather Data table
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Weather_Data (
+            id INTEGER PRIMARY KEY,
+            city_id INTEGER,
+            temperature REAL,
+            weather_condition TEXT,
+            timestamp TEXT,
+            FOREIGN KEY (city_id) REFERENCES Cities(city_id)
+        )
+    ''')
     
-    Input: cursor (sqlite3.Cursor), city_name (string)
-    Output: city_id (integer)
+    # UV Data table
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS UV_Data (
+            id INTEGER PRIMARY KEY,
+            city_id INTEGER,
+            uv_index REAL,
+            timestamp TEXT,
+            FOREIGN KEY (city_id) REFERENCES Cities(city_id)
+        )
+    ''')
     
-    - Checks if city exists in Cities table
-    - Creates new entry if doesn't exist
-    - Returns city_id for use in other tables
-    """
-    pass
-
-
-# ============================================================================
-# DATA COLLECTION FUNCTIONS - ELLA
-# ============================================================================
-
-def store_weather(city_names, api_key, db_name):
-    """
-    Fetches weather data from OpenWeatherMap API and stores in database.
+    # Air Quality Data table
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Air_Quality_Data (
+            id INTEGER PRIMARY KEY,
+            city_id INTEGER,
+            aqi_value REAL,
+            timestamp TEXT,
+            FOREIGN KEY (city_id) REFERENCES Cities(city_id)
+        )
+    ''')
     
-    Input: 
-        - city_names: List of 25 city names (list of strings)
-        - api_key: OpenWeatherMap API key (string)
-        - db_name: Database name (string)
-    
-    Output: 
-        - Returns count of successfully stored cities (integer)
-    
-    Process:
-    - Connects to database
-    - Limits to 25 items per execution
-    - Checks for existing data to avoid duplicates
-    - Fetches temperature and weather_condition from API
-    - Stores data with timestamp in Weather_Data table
-    - Links to Cities table via city_id
-    """
-    pass
+    conn.commit()
+    conn.close()
+    print("Database initialized successfully!")
 
 
 # ============================================================================
-# DATA COLLECTION FUNCTIONS - EMMA
+# DATA COLLECTION FUNCTIONS - ELLA (Weather)
 # ============================================================================
 
-def store_uv(city_names, api_key, city_coordinates, db_name):
-    """
-    Fetches UV index data from OpenUV API and stores in database.
+def store_weather(city_names, api_key, db_name=DB_NAME):
+    """Fetches weather data from OpenWeatherMap API and stores it in database."""
+    conn = sqlite3.connect(db_name)
+    cur = conn.cursor()
     
-    Input: 
-        - city_names: List of 25 city names (list of strings)
-        - api_key: OpenUV API key (string)
-        - city_coordinates: Dictionary mapping city names to (lat, lon) tuples (dict)
-        - db_name: Database name (string)
+    store_count = 0
+    max_stores = 25
     
-    Output: 
-        - Returns count of successfully stored cities (integer)
+    for city in city_names:
+        if store_count >= max_stores:
+            print(f"Reached limit of {max_stores} cities per run")
+            break
+        
+        try:
+            # Check if data already exists for today
+            cur.execute('''
+                SELECT COUNT(*) FROM Weather_Data
+                JOIN Cities ON Weather_Data.city_id = Cities.city_id
+                WHERE Cities.city_name = ? AND DATE(timestamp) = DATE('now')
+            ''', (city,))
+            
+            if cur.fetchone()[0] > 0:
+                print(f"Weather data for {city} already exists for today, skipping...")
+                continue
+            
+            # Make API request
+            params = {
+                'q': city,
+                'appid': api_key,
+                'units': 'imperial'
+            }
+            
+            response = requests.get(OPENWEATHER_BASE_URL, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Extract weather data
+            temperature = data['main']['temp']
+            weather_condition = data['weather'][0]['main']
+            
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Get or create city_id
+            cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city,))
+            result = cur.fetchone()
+            
+            if result:
+                city_id = result[0]
+            else:
+                cur.execute('SELECT MAX(city_id) FROM Cities')
+                max_id = cur.fetchone()[0]
+                city_id = 1 if max_id is None else max_id + 1
+                cur.execute('INSERT INTO Cities (city_id, city_name) VALUES (?, ?)', 
+                           (city_id, city))
+            
+            # Get next id for Weather_Data
+            cur.execute('SELECT MAX(id) FROM Weather_Data')
+            max_id = cur.fetchone()[0]
+            weather_id = 1 if max_id is None else max_id + 1
+            
+            # Insert weather data
+            cur.execute('''
+                INSERT INTO Weather_Data (id, city_id, temperature, weather_condition, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (weather_id, city_id, temperature, weather_condition, timestamp))
+            
+            conn.commit()
+            store_count += 1
+            print(f'Stored weather data for {city}: Temp = {temperature}°F, Condition = {weather_condition}')
+            
+            time.sleep(0.5)
+            
+        except Exception as e:
+            print(f"Error for {city}: {e}")
+            continue
     
-    Process:
-    - Connects to database
-    - Limits to 25 items per execution
-    - Checks for existing data to avoid duplicates
-    - Fetches UV index using coordinates from API
-    - Stores data with timestamp in UV_Data table
-    - Links to Cities table via city_id
-    """
-    pass
+    conn.close()
+    print(f"\nTotal weather records stored: {store_count}")
+    return store_count
 
 
 # ============================================================================
-# DATA COLLECTION FUNCTIONS - MINDY
+# DATA COLLECTION FUNCTIONS - EMMA (UV)
 # ============================================================================
 
-def store_air_quality(city_names, api_key, db_name):
-    """
-    Fetches air quality (AQI) data from WeatherAPI and stores in database.
+def store_uv(city_names, api_key, city_coordinates, db_name=DB_NAME):
+    """Fetches UV data from OpenUV API and stores it in database."""
+    conn = sqlite3.connect(db_name)
+    cur = conn.cursor()
     
-    Input: 
-        - city_names: List of 25 city names (list of strings)
-        - api_key: WeatherAPI key (string)
-        - db_name: Database name (string)
+    stored_count = 0
+    max_stores = 25
     
-    Output: 
-        - Returns count of successfully stored cities (integer)
+    for city in city_names:
+        if stored_count >= max_stores:
+            print(f"Reached limit of {max_stores} cities per run")
+            break
+        
+        try:
+            # Check if data already exists for today
+            cur.execute('''
+                SELECT COUNT(*) FROM UV_Data
+                JOIN Cities ON UV_Data.city_id = Cities.city_id
+                WHERE Cities.city_name = ? AND DATE(timestamp) = DATE('now')
+            ''', (city,))
+            
+            if cur.fetchone()[0] > 0:
+                print(f"UV data for {city} already exists for today, skipping...")
+                continue
+            
+            if city not in city_coordinates:
+                print(f"Coordinates not found for {city}, skipping...")
+                continue
+            
+            lat, lon = city_coordinates[city]
+            
+            headers = {'x-access-token': api_key}
+            params = {'lat': lat, 'lng': lon}
+            
+            response = requests.get(OPENUV_BASE_URL, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            uv_index = data['result']['uv']
+            timestamp = data['result']['uv_time']
+            
+            # Get or create city_id
+            cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city,))
+            result = cur.fetchone()
+            
+            if result:
+                city_id = result[0]
+            else:
+                cur.execute('SELECT MAX(city_id) FROM Cities')
+                max_id = cur.fetchone()[0]
+                city_id = 1 if max_id is None else max_id + 1
+                cur.execute('INSERT INTO Cities (city_id, city_name) VALUES (?, ?)', 
+                           (city_id, city))
+            
+            # Get next id for UV_Data
+            cur.execute('SELECT MAX(id) FROM UV_Data')
+            max_id = cur.fetchone()[0]
+            uv_id = 1 if max_id is None else max_id + 1
+            
+            # Insert UV data
+            cur.execute('''
+                INSERT INTO UV_Data (id, city_id, uv_index, timestamp)
+                VALUES (?, ?, ?, ?)
+            ''', (uv_id, city_id, uv_index, timestamp))
+            
+            conn.commit()
+            stored_count += 1
+            print(f'Stored UV data for {city}: UV Index = {uv_index}')
+            
+            time.sleep(0.5)
+            
+        except Exception as e:
+            print(f"Error for {city}: {e}")
+            continue
     
-    Process:
-    - Connects to database
-    - Limits to 25 items per execution
-    - Checks for existing data to avoid duplicates
-    - Fetches AQI value from API
-    - Stores data with timestamp in Air_Quality_Data table
-    - Links to Cities table via city_id
-    """
-    pass
+    conn.close()
+    print(f"\nTotal UV records stored: {stored_count}")
+    return stored_count
 
 
 # ============================================================================
-# CALCULATION FUNCTIONS - ELLA
+# DATA COLLECTION FUNCTIONS - MINDY (Air Quality)
+# ============================================================================
+
+def store_air_quality(city_names, api_key, db_name=DB_NAME):
+    """Fetches air quality data from WeatherAPI and stores it in database."""
+    conn = sqlite3.connect(db_name)
+    cur = conn.cursor()
+    
+    store_count = 0
+    max_stores = 25
+    
+    for city in city_names:
+        if store_count >= max_stores:
+            print(f"Reached limit of {max_stores} cities per run")
+            break
+        
+        try:
+            # Check if data already exists for today
+            cur.execute('''
+                SELECT COUNT(*) FROM Air_Quality_Data
+                JOIN Cities ON Air_Quality_Data.city_id = Cities.city_id
+                WHERE Cities.city_name = ? AND DATE(timestamp) = DATE('now')
+            ''', (city,))
+            
+            if cur.fetchone()[0] > 0:
+                print(f"Air quality data for {city} already exists for today, skipping...")
+                continue
+            
+            # Make API request
+            params = {
+                'key': api_key,
+                'q': city,
+                'aqi': 'yes'
+            }
+            
+            response = requests.get(WEATHERAPI_BASE_URL, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            aqi_value = data['current']['air_quality']['us-epa-index']
+            timestamp = data['current']['last_updated']
+            
+            # Get or create city_id
+            cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city,))
+            result = cur.fetchone()
+            
+            if result:
+                city_id = result[0]
+            else:
+                cur.execute('SELECT MAX(city_id) FROM Cities')
+                max_id = cur.fetchone()[0]
+                city_id = 1 if max_id is None else max_id + 1
+                cur.execute('INSERT INTO Cities (city_id, city_name) VALUES (?, ?)', 
+                           (city_id, city))
+            
+            # Get next id for Air_Quality_Data
+            cur.execute('SELECT MAX(id) FROM Air_Quality_Data')
+            max_id = cur.fetchone()[0]
+            aqi_id = 1 if max_id is None else max_id + 1
+            
+            # Insert air quality data
+            cur.execute('''
+                INSERT INTO Air_Quality_Data (id, city_id, aqi_value, timestamp)
+                VALUES (?, ?, ?, ?)
+            ''', (aqi_id, city_id, aqi_value, timestamp))
+            
+            conn.commit()
+            store_count += 1
+            print(f'Stored air quality data for {city}: AQI = {aqi_value}')
+            
+            time.sleep(0.5)
+            
+        except Exception as e:
+            print(f"Error for {city}: {e}")
+            continue
+    
+    conn.close()
+    print(f"\nTotal air quality records stored: {store_count}")
+    return store_count
+
+
+# ============================================================================
+# CALCULATION FUNCTIONS
 # ============================================================================
 
 def calculate_avg_temp(db_conn, city_id=None):
-    """
-    Calculates average temperature from weather data.
+    """Calculates average temperature from weather data."""
+    cur = db_conn.cursor()
     
-    Input: 
-        - db_conn: Database connection object (sqlite3.Connection)
-        - city_id: Optional specific city ID (integer or None)
-    
-    Output: 
-        - Average temperature (float)
-        - Writes result to calculations_output.txt
-    
-    Process:
-    - Selects temperature data from Weather_Data table
-    - Filters by city_id if provided, otherwise calculates for all cities
-    - Computes average
-    - Writes formatted result to output file
-    """
-    pass
+    with open(OUTPUT_FILE, 'a') as f:
+        f.write("\n" + "="*50 + "\n")
+        f.write("AVERAGE TEMPERATURE CALCULATIONS\n")
+        f.write("="*50 + "\n\n")
+        
+        if city_id is None:
+            cur.execute('''
+                SELECT Cities.city_name, AVG(Weather_Data.temperature) as avg_temp
+                FROM Weather_Data
+                JOIN Cities ON Weather_Data.city_id = Cities.city_id
+                GROUP BY Cities.city_id, Cities.city_name
+                ORDER BY avg_temp DESC
+            ''')
+            
+            results = cur.fetchall()
+            
+            if not results:
+                print("No weather data found")
+                f.write("No weather data found\n")
+                return None
+            
+            cur.execute('SELECT AVG(temperature) FROM Weather_Data')
+            overall_avg = cur.fetchone()[0]
+            
+            f.write(f"Overall Average Temperature: {overall_avg:.2f}°F\n\n")
+            f.write("Average Temperature by City:\n")
+            f.write("-" * 40 + "\n")
+            
+            for city_name, avg_temp in results:
+                f.write(f"{city_name:25s}: {avg_temp:.2f}°F\n")
+            
+            return overall_avg
+        else:
+            cur.execute('''
+                SELECT Cities.city_name, AVG(Weather_Data.temperature) as avg_temp
+                FROM Weather_Data
+                JOIN Cities ON Weather_Data.city_id = Cities.city_id
+                WHERE Cities.city_id = ?
+                GROUP BY Cities.city_id, Cities.city_name
+            ''', (city_id,))
+            
+            result = cur.fetchone()
+            if result:
+                city_name, avg_temp = result
+                f.write(f"City: {city_name}\n")
+                f.write(f"Average Temperature: {avg_temp:.2f}°F\n")
+                return avg_temp
+            return None
 
-
-# ============================================================================
-# CALCULATION FUNCTIONS - EMMA
-# ============================================================================
 
 def calculate_avg_uv(db_conn, city_id=None):
-    """
-    Calculates average UV index from UV data.
+    """Calculates average UV index from UV data."""
+    cur = db_conn.cursor()
     
-    Input: 
-        - db_conn: Database connection object (sqlite3.Connection)
-        - city_id: Optional specific city ID (integer or None)
-    
-    Output: 
-        - Average UV index (float)
-        - Writes result to calculations_output.txt
-    
-    Process:
-    - Selects UV index data from UV_Data table
-    - Filters by city_id if provided, otherwise calculates for all cities
-    - Computes average
-    - Writes formatted result to output file
-    """
-    pass
+    if city_id is None:
+        cur.execute('''
+            SELECT Cities.city_name, AVG(UV_Data.uv_index) as avg_uv
+            FROM UV_Data
+            JOIN Cities ON UV_Data.city_id = Cities.city_id
+            GROUP BY Cities.city_id, Cities.city_name
+            ORDER BY avg_uv
+        ''')
+        results = cur.fetchall()
+        
+        with open(OUTPUT_FILE, 'a') as f:
+            f.write("\n" + "="*50 + "\n")
+            f.write("AVERAGE UV INDEX BY CITY\n")
+            f.write("="*50 + "\n")
+            for city_name, avg_uv in results:
+                f.write(f"{city_name}: {avg_uv:.2f}\n")
+        
+        cur.execute('SELECT AVG(uv_index) FROM UV_Data')
+        overall_avg = cur.fetchone()[0]
+        return overall_avg if overall_avg else 0.0
+    else:
+        cur.execute('''
+            SELECT AVG(uv_index)
+            FROM UV_Data
+            WHERE city_id = ?
+        ''', (city_id,))
+        avg_uv = cur.fetchone()[0]
+        return avg_uv if avg_uv else 0.0
 
-
-# ============================================================================
-# CALCULATION FUNCTIONS - MINDY
-# ============================================================================
 
 def calculate_avg_aqi(db_conn, city_id=None):
-    """
-    Calculates average Air Quality Index from air quality data.
+    """Calculates average Air Quality Index from air quality data."""
+    cur = db_conn.cursor()
     
-    Input: 
-        - db_conn: Database connection object (sqlite3.Connection)
-        - city_id: Optional specific city ID (integer or None)
-    
-    Output: 
-        - Average AQI (float)
-        - Writes result to calculations_output.txt
-    
-    Process:
-    - Selects AQI data from Air_Quality_Data table
-    - Filters by city_id if provided, otherwise calculates for all cities
-    - Computes average
-    - Writes formatted result to output file
-    """
-    pass
+    with open(OUTPUT_FILE, 'a') as f:
+        f.write("\n" + "="*50 + "\n")
+        f.write("AVERAGE AQI CALCULATIONS\n")
+        f.write("="*50 + "\n\n")
+        
+        if city_id is None:
+            cur.execute('''
+                SELECT Cities.city_name, AVG(Air_Quality_Data.aqi_value) as avg_aqi
+                FROM Air_Quality_Data
+                JOIN Cities ON Air_Quality_Data.city_id = Cities.city_id
+                GROUP BY Cities.city_id, Cities.city_name
+                ORDER BY avg_aqi
+            ''')
+            results = cur.fetchall()
+            
+            if not results:
+                print('No air quality data found')
+                f.write('No air quality data found\n')
+                return None
+            
+            cur.execute('SELECT AVG(aqi_value) FROM Air_Quality_Data')
+            overall_avg = cur.fetchone()[0]
+            f.write(f"Overall Average AQI: {overall_avg:.2f}\n\n")
+            f.write("Average AQI by City:\n")
+            f.write("-" * 40 + "\n")
+            
+            for city_name, avg_aqi in results:
+                f.write(f"{city_name:25s}: {avg_aqi:.2f}\n")
+            
+            return overall_avg
+        else:
+            cur.execute('''
+                SELECT Cities.city_name, AVG(Air_Quality_Data.aqi_value) as avg_aqi
+                FROM Air_Quality_Data
+                JOIN Cities ON Air_Quality_Data.city_id = Cities.city_id
+                WHERE Cities.city_id = ?
+                GROUP BY Cities.city_id, Cities.city_name
+            ''', (city_id,))
+            
+            result = cur.fetchone()
+            if result:
+                city_name, avg_aqi = result
+                f.write(f"City: {city_name}\n")
+                f.write(f"Average AQI: {avg_aqi:.2f}\n")
+                return avg_aqi
+            return None
 
 
 # ============================================================================
