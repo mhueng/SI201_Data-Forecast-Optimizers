@@ -714,9 +714,50 @@ def main():
     3. Perform calculations
     4. Create visualizations
     """
-    pass
-
-
-if __name__ == "__main__":
-    # Entry point for program execution
-    main()
+    print("Initializing database...")
+    init_database()
+    
+    # Collect weather data (Ella's part)
+    print("\n" + "="*50)
+    print("COLLECTING WEATHER DATA")
+    print("="*50)
+    store_weather(CITIES, OPENWEATHER_API_KEY)
+    
+    # Collect UV data (Emma's part)
+    print("\n" + "="*50)
+    print("COLLECTING UV DATA")
+    print("="*50)
+    store_uv(CITIES, OPENUV_API_KEY, CITY_COORDS)
+    
+    # Collect air quality data (Mindy's part)
+    print("\n" + "="*50)
+    print("COLLECTING AIR QUALITY DATA")
+    print("="*50)
+    store_air_quality(CITIES, WEATHERAPI_KEY)
+    
+    # Perform calculations
+    print("\n" + "="*50)
+    print("PERFORMING CALCULATIONS")
+    print("="*50)
+    
+    # Clear the output file
+    with open(OUTPUT_FILE, 'w') as f:
+        f.write("WEATHER DATA ANALYSIS RESULTS\n")
+        f.write("="*50 + "\n")
+    
+    conn = sqlite3.connect(DB_NAME)
+    
+    # Calculate averages
+    avg_temp = calculate_avg_temp(conn)
+    avg_uv = calculate_avg_uv(conn)
+    avg_aqi = calculate_avg_aqi(conn)
+    
+    print(f"\nOverall Average Temperature: {avg_temp:.2f}°F" if avg_temp else "No temperature data")
+    print(f"Overall Average UV Index: {avg_uv:.2f}" if avg_uv else "No UV data")
+    print(f"Overall Average AQI: {avg_aqi:.2f}" if avg_aqi else "No AQI data")
+    
+    conn.close()
+    
+    print("\n" + "="*50)
+    print("COMPLETE! Check calculations_output.txt for detailed results.")
+    print("="*50)
