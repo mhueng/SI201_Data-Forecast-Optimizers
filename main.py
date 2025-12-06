@@ -75,7 +75,6 @@ CITY_COORDS = {
 
 
 def init_database():
-    """Initializes the database and creates all necessary tables."""
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
     
@@ -125,7 +124,6 @@ def init_database():
 
 
 def store_weather(city_names, api_key, db_name=DB_NAME):
-    """Fetches weather data from OpenWeatherMap API and stores it in database."""
     conn = sqlite3.connect(db_name)
     cur = conn.cursor()
     
@@ -138,16 +136,6 @@ def store_weather(city_names, api_key, db_name=DB_NAME):
             break
         
         try:
-            cur.execute('''
-                SELECT COUNT(*) FROM Weather_Data
-                JOIN Cities ON Weather_Data.city_id = Cities.city_id
-                WHERE Cities.city_name = ? AND DATE(timestamp) = DATE('now')
-            ''', (city,))
-            
-            if cur.fetchone()[0] > 0:
-                print(f"Weather data for {city} already exists for today, skipping...")
-                continue
-            
             params = {
                 'q': city,
                 'appid': api_key,
@@ -160,7 +148,7 @@ def store_weather(city_names, api_key, db_name=DB_NAME):
             
             temperature = data['main']['temp']
             weather_condition = data['weather'][0]['main']
-            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
             
             cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city,))
             result = cur.fetchone()
@@ -194,14 +182,21 @@ def store_weather(city_names, api_key, db_name=DB_NAME):
             continue
     
     conn.close()
-    print(f"\nTotal weather records stored: {store_count}")
+    print(f"\nTotal weather records stored this run: {store_count}")
+    
+    conn = sqlite3.connect(db_name)
+    cur = conn.cursor()
+    cur.execute('SELECT COUNT(*) FROM Weather_Data')
+    total = cur.fetchone()[0]
+    conn.close()
+    print(f"Total weather records in database: {total}")
+    
     return store_count
 
 
 
 
 def store_uv(city_names, api_key, city_coordinates, db_name=DB_NAME):
-    """Fetches UV data from OpenUV API and stores it in database."""
     conn = sqlite3.connect(db_name)
     cur = conn.cursor()
     
@@ -214,16 +209,6 @@ def store_uv(city_names, api_key, city_coordinates, db_name=DB_NAME):
             break
         
         try:
-            cur.execute('''
-                SELECT COUNT(*) FROM UV_Data
-                JOIN Cities ON UV_Data.city_id = Cities.city_id
-                WHERE Cities.city_name = ? AND DATE(timestamp) = DATE('now')
-            ''', (city,))
-            
-            if cur.fetchone()[0] > 0:
-                print(f"UV data for {city} already exists for today, skipping...")
-                continue
-            
             if city not in city_coordinates:
                 print(f"Coordinates not found for {city}, skipping...")
                 continue
@@ -238,7 +223,7 @@ def store_uv(city_names, api_key, city_coordinates, db_name=DB_NAME):
             data = response.json()
             
             uv_index = data['result']['uv']
-            timestamp = data['result']['uv_time']
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
             
             cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city,))
             result = cur.fetchone()
@@ -272,14 +257,21 @@ def store_uv(city_names, api_key, city_coordinates, db_name=DB_NAME):
             continue
     
     conn.close()
-    print(f"\nTotal UV records stored: {stored_count}")
+    print(f"\nTotal UV records stored this run: {stored_count}")
+    
+    conn = sqlite3.connect(db_name)
+    cur = conn.cursor()
+    cur.execute('SELECT COUNT(*) FROM UV_Data')
+    total = cur.fetchone()[0]
+    conn.close()
+    print(f"Total UV records in database: {total}")
+    
     return stored_count
 
 
 
 
 def store_air_quality(city_names, api_key, db_name=DB_NAME):
-    """Fetches air quality data from WeatherAPI and stores it in database."""
     conn = sqlite3.connect(db_name)
     cur = conn.cursor()
     
@@ -292,16 +284,6 @@ def store_air_quality(city_names, api_key, db_name=DB_NAME):
             break
         
         try:
-            cur.execute('''
-                SELECT COUNT(*) FROM Air_Quality_Data
-                JOIN Cities ON Air_Quality_Data.city_id = Cities.city_id
-                WHERE Cities.city_name = ? AND DATE(timestamp) = DATE('now')
-            ''', (city,))
-            
-            if cur.fetchone()[0] > 0:
-                print(f"Air quality data for {city} already exists for today, skipping...")
-                continue
-            
             params = {
                 'key': api_key,
                 'q': city,
@@ -313,7 +295,7 @@ def store_air_quality(city_names, api_key, db_name=DB_NAME):
             data = response.json()
             
             aqi_value = data['current']['air_quality']['us-epa-index']
-            timestamp = data['current']['last_updated']
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
             
             cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city,))
             result = cur.fetchone()
@@ -347,13 +329,20 @@ def store_air_quality(city_names, api_key, db_name=DB_NAME):
             continue
     
     conn.close()
-    print(f"\nTotal air quality records stored: {store_count}")
+    print(f"\nTotal air quality records stored this run: {store_count}")
+    
+    conn = sqlite3.connect(db_name)
+    cur = conn.cursor()
+    cur.execute('SELECT COUNT(*) FROM Air_Quality_Data')
+    total = cur.fetchone()[0]
+    conn.close()
+    print(f"Total air quality records in database: {total}")
+    
     return store_count
 
 
 
 def calculate_avg_temp(db_conn, city_id=None):
-    """Calculates average temperature from weather data."""
     cur = db_conn.cursor()
     
     with open(OUTPUT_FILE, 'a') as f:
@@ -409,7 +398,6 @@ def calculate_avg_temp(db_conn, city_id=None):
 
 
 def calculate_avg_uv(db_conn, city_id=None):
-    """Calculates average UV index from UV data."""
     cur = db_conn.cursor()
     
     if city_id is None:
@@ -445,7 +433,6 @@ def calculate_avg_uv(db_conn, city_id=None):
 
 
 def calculate_avg_aqi(db_conn, city_id=None):
-    """Calculates average Air Quality Index from air quality data."""
     cur = db_conn.cursor()
     
     with open(OUTPUT_FILE, 'a') as f:
@@ -499,10 +486,6 @@ def calculate_avg_aqi(db_conn, city_id=None):
 
 
 def calculate_safety_score(db_conn):
-    """
-    Calculates composite outdoor activity safety score for each city.
-    Lower score = safer for outdoor activities.
-    """
     cur = db_conn.cursor()
     
     cur.execute('SELECT city_id, city_name FROM Cities')
@@ -572,7 +555,6 @@ def calculate_safety_score(db_conn):
 
 
 def get_calculated_data(db_conn):
-    """Retrieves all calculated data needed for visualizations."""
     cur = db_conn.cursor()
     
     cur.execute('SELECT city_id, city_name FROM Cities')
@@ -620,7 +602,6 @@ def get_calculated_data(db_conn):
 
 
 def create_safety_ranking_chart(calculated_data):
-    """Creates ranked bar chart of top 10 safest cities."""
     city_score_pairs = []
     for i in range(len(calculated_data['cities'])):
         city_score_pairs.append((calculated_data['cities'][i], calculated_data['safety_scores'][i]))
@@ -645,7 +626,6 @@ def create_safety_ranking_chart(calculated_data):
 
 
 def create_grouped_comparison_chart(calculated_data):
-    """Creates grouped bar chart comparing temperature, UV, and AQI."""
     data_tuples = []
     for i in range(len(calculated_data['cities'])):
         data_tuples.append((
@@ -687,7 +667,6 @@ def create_grouped_comparison_chart(calculated_data):
 
 
 def create_scatter_plot(calculated_data):
-    """Creates scatter plot of temperature vs AQI with UV as color."""
     plt.figure(figsize=(12, 8))
     
     scatter = plt.scatter(
@@ -719,7 +698,6 @@ def create_scatter_plot(calculated_data):
 
 
 def create_horizontal_rankings(calculated_data):
-    """Creates three separate horizontal bar charts for individual rankings."""
     
     temp_data = []
     for i in range(len(calculated_data['cities'])):
@@ -784,7 +762,6 @@ def create_horizontal_rankings(calculated_data):
 
 
 def create_heatmap(calculated_data):
-    """Creates color-coded heatmap grid of all metrics."""
     all_data = []
     for i in range(len(calculated_data['cities'])):
         temps_norm = abs(calculated_data['avg_temps'][i] - 70) / 30
@@ -833,7 +810,6 @@ def create_heatmap(calculated_data):
 
 
 def create_visualizations(calculated_data):
-    """Master function that generates all visualizations."""
     print("\n" + "="*50)
     print("CREATING VISUALIZATIONS")
     print("="*50)
@@ -854,9 +830,6 @@ def create_visualizations(calculated_data):
 
 
 def main():
-    """
-    Main execution function that coordinates the entire program.
-    """
     print("="*60)
     print("WEATHER DATA ANALYSIS PROJECT")
     print("="*60)
