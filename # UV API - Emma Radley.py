@@ -5,27 +5,6 @@ import sqlite3
 import time
 
 def store_uv(city_names, api_key, city_coordinates, db_name='weather_data.db'):
-    """
-    Fetches UV index data from OpenUV API and stores in database.
-    
-    Input: 
-        - city_names: List of 25 city names (list of strings)
-        - api_key: OpenUV API key (string)
-        - city_coordinates: Dictionary mapping city names to (lat, lon) tuples (dict)
-        - db_name: Database name (string, default='weather_data.db')
-    
-    Output: 
-        - Returns count of successfully stored cities (integer)
-    
-    Process:
-        - Connects to database
-        - Creates tables if they don't exist
-        - Limits to 25 items per execution
-        - Checks for existing data to avoid duplicates
-        - Fetches UV index using coordinates from OpenUV API
-        - Stores data with timestamp in UV_Data table
-        - Links to Cities table via city_id
-    """
     conn = sqlite3.connect(db_name)
     cur = conn.cursor()
     
@@ -131,17 +110,6 @@ def store_uv(city_names, api_key, city_coordinates, db_name='weather_data.db'):
 
 
 def calculate_avg_uv(conn, city_id=None):
-    """
-    Calculates average UV index for a specific city or all cities.
-    
-    Input:
-        - conn: Database connection (sqlite3 object)
-        - city_id: Specific city ID (integer) or None for all cities
-    
-    Output:
-        - Average UV index (float)
-        - Writes results to calculations_output.txt
-    """
     cur = conn.cursor()
     
     if city_id is None:
