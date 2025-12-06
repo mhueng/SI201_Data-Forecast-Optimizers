@@ -1,43 +1,10 @@
 # UV API - Emma Radley.py
 
-import sqlite3
 import requests
+import sqlite3
 import time
-from datetime import datetime
 
-def create_uv_table(db_name):
-    
-    """
-    Creates the UV_Data table in the database if it doesn't exist.
-    
-    Input:
-        - db_name: Database name (string)
-    
-    Process:
-    - Connects to database
-    - Creates UV_Data table with proper schema
-    - Links to Cities table via city_id foreign key
-    """
-
-    conn = sqlite3.connect(db_name)
-    cur = conn.cursor()
-
- # Create UV_Data table
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS UV_Data (
-            uv_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            city_id INTEGER NOT NULL,
-            uv_index REAL NOT NULL,
-            timestamp TEXT NOT NULL,
-            FOREIGN KEY (city_id) REFERENCES Cities(city_id)
-        )
-    """)
-    
-    conn.commit()
-    conn.close()
-    print("UV_Data table created successfully!")
-
-def store_uv(city_names, api_key, city_coordinates, db_name):
+def store_uv(city_names, api_key, city_coordinates, db_name='weather_data.db'):
     """
     Fetches UV index data from OpenUV API and stores in database.
     
@@ -45,125 +12,257 @@ def store_uv(city_names, api_key, city_coordinates, db_name):
         - city_names: List of 25 city names (list of strings)
         - api_key: OpenUV API key (string)
         - city_coordinates: Dictionary mapping city names to (lat, lon) tuples (dict)
-        - db_name: Database name (string)
+        - db_name: Database name (string, default='weather_data.db')
     
     Output: 
         - Returns count of successfully stored cities (integer)
     
     Process:
-    - Connects to database
-    - Limits to 25 items per execution
-    - Checks for existing data to avoid duplicates
-    - Fetches UV index using coordinates from API
-    - Stores data with timestamp in UV_Data table
-    - Links to Cities table via city_id
+        - Connects to database
+        - Creates tables if they don't exist
+        - Limits to 25 items per execution
+        - Checks for existing data to avoid duplicates
+        - Fetches UV index using coordinates from OpenUV API
+        - Stores data with timestamp in UV_Data table
+        - Links to Cities table via city_id
     """
-    
-    # Limit to 25 cities
-    city_names = city_names[:25]
-    
-    # Connect to database
     conn = sqlite3.connect(db_name)
     cur = conn.cursor()
     
-    # Counter for successfully stored cities
-    success_count = 0
+    # Create Cities table (shared with other team members)
+    cur.execute('''
+                CREATE TABLE IF NOT EXISTS Cities (
+                    city_id INTEGER PRIMARY KEY,
+                    city_name TEXT UNIQUE
+                    )
+                    ''')
     
-    # OpenUV API endpoint
+    # Create UV_Data table
+    cur.execute('''
+                CREATE TABLE IF NOT EXISTS UV_Data (
+                    id INTEGER PRIMARY KEY,
+                    city_id INTEGER,
+                    uv_index REAL,
+                    timestamp TEXT,
+                    FOREIGN KEY (city_id) REFERENCES Cities(city_id)
+                    )
+                    ''')
+    
+    conn.commit()
+    
+    stored_count = 0
+    max_stores = 25
+    
     base_url = "https://api.openuv.io/api/v1/uv"
     
-    for city_name in city_names:
+    for city in city_names:
+        if stored_count >= max_stores:
+            print(f"Reached limit of {max_stores} cities per run")
+            break
+        
         try:
-            # Get city_id from Cities table
-            cur.execute("SELECT city_id FROM Cities WHERE city_name = ?", (city_name,))
+            # Check if UV data already exists for this city today
+            cur.execute('''
+                        SELECT COUNT(*) FROM UV_Data
+                        JOIN Cities ON UV_Data.city_id = Cities.city_id
+                        WHERE Cities.city_name = ? AND DATE(timestamp) = DATE('now')
+                        ''', (city,))
+            
+            if cur.fetchone()[0] > 0:
+                print(f"UV data for {city} already exists for today, skipping...")
+                continue
+            
+            # Check if coordinates are available
+            if city not in city_coordinates:
+                print(f"Coordinates not found for {city}, skipping...")
+                continue
+            
+            lat, lon = city_coordinates[city]
+            
+            # Set up API request headers
+            headers = {
+                'x-access-token': api_key
+            }
+            
+            # Set up API request parameters
+            params = {
+                'lat': lat,
+                'lng': lon
+            }
+            
+            # Fetch UV data from OpenUV API
+            response = requests.get(base_url, headers=headers, params=params)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Extract UV index and timestamp from API response
+            uv_index = data['result']['uv']
+            timestamp = data['result']['uv_time']
+            
+            # Get or create city_id
+            cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city,))
             result = cur.fetchone()
             
-            if not result:
-                print(f"City '{city_name}' not found in Cities table. Skipping.")
-                continue
-            
-            city_id = result[0]
-            
-            # Check if UV data already exists for this city
-            cur.execute("SELECT COUNT(*) FROM UV_Data WHERE city_id = ?", (city_id,))
-            if cur.fetchone()[0] > 0:
-                print(f"UV data already exists for '{city_name}'. Skipping.")
-                continue
-            
-            # Get coordinates
-            if city_name not in city_coordinates:
-                print(f"Coordinates not found for '{city_name}'. Skipping.")
-                continue
-            
-            lat, lon = city_coordinates[city_name]
-            
-            # Prepare API request
-            headers = {
-                "x-access-token": api_key
-            }
-            params = {
-                "lat": lat,
-                "lng": lon
-            }
-            
-            # Fetch UV data from API
-            response = requests.get(base_url, headers=headers, params=params)
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                # Extract UV index from response
-                uv_index = data['result']['uv']
-                
-                # Get current timestamp
-                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                
-                # Insert into UV_Data table
-                cur.execute("""
-                    INSERT INTO UV_Data (city_id, uv_index, timestamp)
-                    VALUES (?, ?, ?)
-                """, (city_id, uv_index, timestamp))
-                
-                conn.commit()
-                success_count += 1
-                print(f"Successfully stored UV data for '{city_name}' (UV: {uv_index})")
-                
+            if result:
+                city_id = result[0]
             else:
-                print(f"API request failed for '{city_name}': {response.status_code}")
+                cur.execute('SELECT MAX(city_id) FROM Cities')
+                max_id = cur.fetchone()[0]
+                city_id = 1 if max_id is None else max_id + 1
+                cur.execute('INSERT INTO Cities (city_id, city_name) VALUES (?, ?)', (city_id, city))
             
-            # Rate limiting - be respectful to the API
-            time.sleep(1)
+            # Get next available id for UV_Data
+            cur.execute('SELECT MAX(id) FROM UV_Data')
+            max_id = cur.fetchone()[0]
+            uv_id = 1 if max_id is None else max_id + 1
+            
+            # Insert UV data into database
+            cur.execute('''
+                        INSERT INTO UV_Data (id, city_id, uv_index, timestamp)
+                        VALUES (?, ?, ?, ?)
+                        ''', (uv_id, city_id, uv_index, timestamp))
+            
+            conn.commit()
+            stored_count += 1
+            print(f'Stored UV data for {city}: UV Index = {uv_index}')
+            
+            # Rate limiting to be respectful to API
+            time.sleep(0.5)
             
         except requests.exceptions.RequestException as e:
-            print(f"Network error for '{city_name}': {e}")
-        except sqlite3.Error as e:
-            print(f"Database error for '{city_name}': {e}")
-            conn.rollback()
+            print(f"Error fetching data for {city}: {e}")
+            continue
         except KeyError as e:
-            print(f"Unexpected API response format for '{city_name}': {e}")
-        except Exception as e:
-            print(f"Unexpected error for '{city_name}': {e}")
+            print(f"Error parsing data for {city}: Missing key {e}")
+            continue
     
-    # Close database connection
     conn.close()
+    print(f"\nTotal cities stored this run: {stored_count}")
+    return stored_count
+
+
+def calculate_avg_uv(conn, city_id=None):
+    """
+    Calculates average UV index for a specific city or all cities.
     
-    print(f"\nTotal cities processed successfully: {success_count}/{len(city_names)}")
-    return success_count
+    Input:
+        - conn: Database connection (sqlite3 object)
+        - city_id: Specific city ID (integer) or None for all cities
+    
+    Output:
+        - Average UV index (float)
+        - Writes results to calculations_output.txt
+    """
+    cur = conn.cursor()
+    
+    if city_id is None:
+        # Calculate average UV index for all cities
+        cur.execute('''
+                    SELECT Cities.city_name, AVG(UV_Data.uv_index) as avg_uv
+                    FROM UV_Data
+                    JOIN Cities ON UV_Data.city_id = Cities.city_id
+                    GROUP BY Cities.city_id, Cities.city_name
+                    ORDER BY avg_uv
+                    ''')
+        results = cur.fetchall()
+        
+        # Write to output file
+        with open('calculations_output.txt', 'a') as f:
+            f.write("\n" + "="*50 + "\n")
+            f.write("AVERAGE UV INDEX BY CITY\n")
+            f.write("="*50 + "\n")
+            for city_name, avg_uv in results:
+                f.write(f"{city_name}: {avg_uv:.2f}\n")
+        
+        print("\n=== Average UV Index by City ===")
+        for city_name, avg_uv in results:
+            print(f"{city_name}: {avg_uv:.2f}")
+        
+        # Return overall average across all cities
+        cur.execute('SELECT AVG(uv_index) FROM UV_Data')
+        overall_avg = cur.fetchone()[0]
+        return overall_avg if overall_avg else 0.0
+    
+    else:
+        # Calculate average UV index for specific city
+        cur.execute('''
+                    SELECT AVG(uv_index)
+                    FROM UV_Data
+                    WHERE city_id = ?
+                    ''', (city_id,))
+        avg_uv = cur.fetchone()[0]
+        
+        # Get city name
+        cur.execute('SELECT city_name FROM Cities WHERE city_id = ?', (city_id,))
+        city_name = cur.fetchone()[0]
+        
+        # Write to output file
+        with open('calculations_output.txt', 'a') as f:
+            f.write(f"\nAverage UV Index for {city_name}: {avg_uv:.2f}\n")
+        
+        print(f"Average UV Index for {city_name}: {avg_uv:.2f}")
+        
+        return avg_uv if avg_uv else 0.0
 
 
-# Example usage:
 if __name__ == "__main__":
-    # Database name
-    db_name = "outdoor_activity.db"
+    # List of 25 cities for the 4-day June data collection period
+    cities = [
+        "New York", "Los Angeles", "Chicago", "Houston", "Phoenix",
+        "Philadelphia", "San Antonio", "San Diego", "Dallas", "Austin",
+        "Jacksonville", "Fort Worth", "Columbus", "Charlotte", "Indianapolis",
+        "San Francisco", "Seattle", "Denver", "Boston", "Nashville",
+        "Detroit", "Portland", "Las Vegas", "Memphis", "Louisville"
+    ]
     
-    # STEP 1: Create the UV_Data table first
-    create_uv_table(db_name)
-    
-    # STEP 2: Prepare your data
-    sample_cities = ["New York", "Los Angeles", "Chicago"]
-    sample_api_key = "your_openuv_api_key_here"
-    sample_coordinates = {
+    # City coordinates dictionary (latitude, longitude)
+    city_coordinates = {
         "New York": (40.7128, -74.0060),
         "Los Angeles": (34.0522, -118.2437),
-        "Chicago": (41.8781, -87.6298)
+        "Chicago": (41.8781, -87.6298),
+        "Houston": (29.7604, -95.3698),
+        "Phoenix": (33.4484, -112.0740),
+        "Philadelphia": (39.9526, -75.1652),
+        "San Antonio": (29.4241, -98.4936),
+        "San Diego": (32.7157, -117.1611),
+        "Dallas": (32.7767, -96.7970),
+        "Austin": (30.2672, -97.7431),
+        "Jacksonville": (30.3322, -81.6557),
+        "Fort Worth": (32.7555, -97.3308),
+        "Columbus": (39.9612, -82.9988),
+        "Charlotte": (35.2271, -80.8431),
+        "Indianapolis": (39.7684, -86.1581),
+        "San Francisco": (37.7749, -122.4194),
+        "Seattle": (47.6062, -122.3321),
+        "Denver": (39.7392, -104.9903),
+        "Boston": (42.3601, -71.0589),
+        "Nashville": (36.1627, -86.7816),
+        "Detroit": (42.3314, -83.0458),
+        "Portland": (45.5152, -122.6784),
+        "Las Vegas": (36.1699, -115.1398),
+        "Memphis": (35.1495, -90.0490),
+        "Louisville": (38.2527, -85.7585)
     }
+    
+    # STEP 1: Store UV data (run this multiple times to collect data over 4 days)
+    # Replace with your actual OpenUV API key
+    api_key = "openuv-ac490wrminnpcmb-io"
+
+    
+    print("Running store_uv function...")
+    count = store_uv(cities, api_key, city_coordinates)
+    print(f"\n✓ Successfully stored UV data for {count} cities")
+    
+    # STEP 2: Calculate averages (run this AFTER collecting all data over 4 days)
+    # Uncomment the lines below after you've collected all your data
+    """
+    print("\n" + "="*50)
+    print("Calculating average UV index for all cities...")
+    print("="*50)
+    conn = sqlite3.connect('weather_data.db')
+    avg_uv = calculate_avg_uv(conn)
+    print(f"\n✓ Overall average UV index across all cities: {avg_uv:.2f}")
+    print("✓ Results written to calculations_output.txt")
+    conn.close()
+    """
