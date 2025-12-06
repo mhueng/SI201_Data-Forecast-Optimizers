@@ -4,6 +4,7 @@ import json
 import time
 import matplotlib.pyplot as plt
 import numpy as np
+from datetime import datetime
 
 
 # ============================================================================
@@ -99,7 +100,7 @@ def init_database():
             city_id INTEGER,
             uv_index REAL,
             timestamp TEXT,
-            FOREIGN KEY (city_id) REFERENCES Cities(city_id)å
+            FOREIGN KEY (city_id) REFERENCES Cities(city_id)
         )
     ''')
     
@@ -162,8 +163,6 @@ def store_weather(city_names, api_key, db_name=DB_NAME):
             # Extract weather data
             temperature = data['main']['temp']
             weather_condition = data['weather'][0]['main']
-            
-            from datetime import datetime
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
             # Get or create city_id
@@ -372,7 +371,7 @@ def store_air_quality(city_names, api_key, db_name=DB_NAME):
 
 
 # ============================================================================
-# CALCULATION FUNCTIONS
+# CALCULATION FUNCTIONS - ELLA
 # ============================================================================
 
 def calculate_avg_temp(db_conn, city_id=None):
@@ -429,6 +428,10 @@ def calculate_avg_temp(db_conn, city_id=None):
             return None
 
 
+# ============================================================================
+# CALCULATION FUNCTIONS - EMMA
+# ============================================================================
+
 def calculate_avg_uv(db_conn, city_id=None):
     """Calculates average UV index from UV data."""
     cur = db_conn.cursor()
@@ -462,6 +465,10 @@ def calculate_avg_uv(db_conn, city_id=None):
         avg_uv = cur.fetchone()[0]
         return avg_uv if avg_uv else 0.0
 
+
+# ============================================================================
+# CALCULATION FUNCTIONS - MINDY
+# ============================================================================
 
 def calculate_avg_aqi(db_conn, city_id=None):
     """Calculates average Air Quality Index from air quality data."""
@@ -516,188 +523,354 @@ def calculate_avg_aqi(db_conn, city_id=None):
 
 
 # ============================================================================
-# CALCULATION FUNCTIONS - EVERYONE
+# CALCULATION FUNCTIONS - EVERYONE (Safety Score)
 # ============================================================================
 
 def calculate_safety_score(db_conn):
     """
     Calculates composite outdoor activity safety score for each city.
-    
-    Input: 
-        - db_conn: Database connection object (sqlite3.Connection)
-    
-    Output: 
-        - Dictionary mapping city names to safety scores (dict)
-        - Writes ranked list to calculations_output.txt
-    
-    Process:
-    - Performs JOIN operations across Weather_Data, UV_Data, and Air_Quality_Data tables
-    - Links all tables through city_id from Cities table
-    - Calculates averages for each city
-    - Applies composite formula:
-        * Lower UV index = safer (less sun exposure)
-        * Lower AQI = safer (cleaner air)
-        * Temperature near 70°F = more comfortable
-    - Ranks cities from safest to least safe
-    - Returns dictionary and writes formatted rankings to file
+    Lower score = safer for outdoor activities.
     """
-    pass
+    cur = db_conn.cursor()
+    
+    # Get all cities that have all three types of data
+    cur.execute('SELECT city_id, city_name FROM Cities')
+    cities = cur.fetchall()
+    
+    safety_scores = {}
+    
+    for city_id, city_name in cities:
+        # Get average temp for this city
+        cur.execute('''
+            SELECT AVG(temperature) 
+            FROM Weather_Data 
+            WHERE city_id = ?
+        ''', (city_id,))
+        temp_result = cur.fetchone()
+        
+        # Get average UV for this city
+        cur.execute('''
+            SELECT AVG(uv_index) 
+            FROM UV_Data 
+            WHERE city_id = ?
+        ''', (city_id,))
+        uv_result = cur.fetchone()
+        
+        # Get average AQI for this city
+        cur.execute('''
+            SELECT AVG(aqi_value) 
+            FROM Air_Quality_Data 
+            WHERE city_id = ?
+        ''', (city_id,))
+        aqi_result = cur.fetchone()
+        
+        # Only calculate safety score if city has all three data types
+        if temp_result[0] and uv_result[0] and aqi_result[0]:
+            avg_temp = temp_result[0]
+            avg_uv = uv_result[0]
+            avg_aqi = aqi_result[0]
+            
+            # Calculate normalized scores
+            temp_score = abs(avg_temp - 70) / 30.0
+            uv_score = avg_uv / 12.0
+            aqi_score = avg_aqi / 6.0
+            
+            # Composite score
+            composite_score = (temp_score * 0.3) + (uv_score * 0.3) + (aqi_score * 0.4)
+            
+            safety_scores[city_name] = composite_score
+    
+    # Sort by safety score using a simple bubble sort (no argsort)
+    sorted_list = []
+    for city, score in safety_scores.items():
+        sorted_list.append((city, score))
+    
+    # Bubble sort
+    for i in range(len(sorted_list)):
+        for j in range(len(sorted_list) - 1 - i):
+            if sorted_list[j][1] > sorted_list[j + 1][1]:
+                sorted_list[j], sorted_list[j + 1] = sorted_list[j + 1], sorted_list[j]
+    
+    # Write to file
+    with open(OUTPUT_FILE, 'a') as f:
+        f.write("\n" + "="*50 + "\n")
+        f.write("OUTDOOR ACTIVITY SAFETY SCORES\n")
+        f.write("(Lower score = safer for outdoor activities)\n")
+        f.write("="*50 + "\n\n")
+        f.write(f"{'Rank':<6} {'City':<25} {'Safety Score':<15}\n")
+        f.write("-" * 50 + "\n")
+        
+        for rank, (city, score) in enumerate(sorted_list, 1):
+            f.write(f"{rank:<6} {city:<25} {score:.4f}\n")
+            print(f"{rank}. {city}: {score:.4f}")
+    
+    return dict(sorted_list)
 
 
 # ============================================================================
-# VISUALIZATION HELPER FUNCTION
+# DATA RETRIEVAL FOR VISUALIZATIONS - EVERYONE
 # ============================================================================
 
 def get_calculated_data(db_conn):
-    """
-    Retrieves all calculated data needed for visualizations.
+    """Retrieves all calculated data needed for visualizations."""
+    cur = db_conn.cursor()
     
-    Input: 
-        - db_conn: Database connection object (sqlite3.Connection)
+    # Get all cities
+    cur.execute('SELECT city_id, city_name FROM Cities')
+    cities_data = cur.fetchall()
     
-    Output: 
-        - Dictionary containing all visualization data (dict)
+    cities = []
+    avg_temps = []
+    avg_uvs = []
+    avg_aqis = []
+    safety_scores = []
     
-    Returns structure:
-    {
-        'cities': [list of city names],
-        'safety_scores': [list of scores],
-        'avg_temps': [list of temperatures],
-        'avg_uv': [list of UV indices],
-        'avg_aqi': [list of AQI values]
+    for city_id, city_name in cities_data:
+        # Get average temp
+        cur.execute('SELECT AVG(temperature) FROM Weather_Data WHERE city_id = ?', (city_id,))
+        temp_result = cur.fetchone()
+        
+        # Get average UV
+        cur.execute('SELECT AVG(uv_index) FROM UV_Data WHERE city_id = ?', (city_id,))
+        uv_result = cur.fetchone()
+        
+        # Get average AQI
+        cur.execute('SELECT AVG(aqi_value) FROM Air_Quality_Data WHERE city_id = ?', (city_id,))
+        aqi_result = cur.fetchone()
+        
+        # Only include cities with all three data types
+        if temp_result[0] and uv_result[0] and aqi_result[0]:
+            avg_temp = temp_result[0]
+            avg_uv = uv_result[0]
+            avg_aqi = aqi_result[0]
+            
+            # Calculate safety score
+            temp_score = abs(avg_temp - 70) / 30.0
+            uv_score = avg_uv / 12.0
+            aqi_score = avg_aqi / 6.0
+            composite_score = (temp_score * 0.3) + (uv_score * 0.3) + (aqi_score * 0.4)
+            
+            cities.append(city_name)
+            avg_temps.append(avg_temp)
+            avg_uvs.append(avg_uv)
+            avg_aqis.append(avg_aqi)
+            safety_scores.append(composite_score)
+    
+    return {
+        'cities': cities,
+        'safety_scores': safety_scores,
+        'avg_temps': avg_temps,
+        'avg_uv': avg_uvs,
+        'avg_aqi': avg_aqis
     }
-    
-    Process:
-    - Performs JOIN across all tables
-    - Groups data by city
-    - Calculates averages
-    - Formats data for easy plotting
-    """
-    pass
-
 
 # ============================================================================
 # VISUALIZATION FUNCTIONS - EVERYONE
 # ============================================================================
 
 def create_safety_ranking_chart(calculated_data):
-    """
-    Creates ranked bar chart of top 10 safest cities.
+    """Creates ranked bar chart of top 10 safest cities."""
+    # Sort by safety score and get top 10
+    sorted_indices = np.argsort(calculated_data['safety_scores'])[:10]
     
-    Input: 
-        - calculated_data: Dictionary with city data (dict)
+    top_cities = [calculated_data['cities'][i] for i in sorted_indices]
+    top_scores = [calculated_data['safety_scores'][i] for i in sorted_indices]
     
-    Output: 
-        - Saves 'safety_ranking.png' image file
-    
-    Visualization:
-    - Bar chart showing top 10 cities
-    - X-axis: City names
-    - Y-axis: Safety scores (lower = safer)
-    - Custom colors to differentiate bars
-    - Title and labels
-    """
-    pass
+    plt.figure(figsize=(12, 6))
+    colors = plt.cm.viridis(np.linspace(0, 0.8, len(top_cities)))
+    plt.bar(range(len(top_cities)), top_scores, color=colors)
+    plt.xlabel('City', fontsize=12, fontweight='bold')
+    plt.ylabel('Safety Score (Lower = Safer)', fontsize=12, fontweight='bold')
+    plt.title('Top 10 Safest Cities for Outdoor Activities', fontsize=14, fontweight='bold')
+    plt.xticks(range(len(top_cities)), top_cities, rotation=45, ha='right')
+    plt.tight_layout()
+    plt.savefig('safety_ranking.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print("✓ Created safety_ranking.png")
 
 
 def create_grouped_comparison_chart(calculated_data):
-    """
-    Creates grouped bar chart comparing temperature, UV, and AQI.
+    """Creates grouped bar chart comparing temperature, UV, and AQI."""
+    # Select 10 cities with best safety scores
+    sorted_indices = np.argsort(calculated_data['safety_scores'])[:10]
     
-    Input: 
-        - calculated_data: Dictionary with city data (dict)
+    cities = [calculated_data['cities'][i] for i in sorted_indices]
+    temps = [calculated_data['avg_temps'][i] for i in sorted_indices]
+    uvs = [calculated_data['avg_uv'][i] for i in sorted_indices]
+    aqis = [calculated_data['avg_aqi'][i] for i in sorted_indices]
     
-    Output: 
-        - Saves 'grouped_comparison.png' image file
+    x = np.arange(len(cities))
+    width = 0.25
     
-    Visualization:
-    - Grouped bars for selected cities
-    - Three bars per city (temp, UV, AQI)
-    - Different colors for each metric
-    - Legend to identify metrics
-    - Shows which factors contribute to each city's score
-    """
-    pass
+    fig, ax = plt.subplots(figsize=(14, 6))
+    
+    # Normalize for visual comparison
+    temps_norm = [t / 100 * 10 for t in temps]  # Scale to similar range
+    
+    ax.bar(x - width, temps_norm, width, label='Temp (scaled)', color='#FF6B6B')
+    ax.bar(x, uvs, width, label='UV Index', color='#4ECDC4')
+    ax.bar(x + width, aqis, width, label='AQI', color='#95E1D3')
+    
+    ax.set_xlabel('City', fontsize=12, fontweight='bold')
+    ax.set_ylabel('Values', fontsize=12, fontweight='bold')
+    ax.set_title('Comparison of Weather Metrics (Top 10 Safest Cities)', fontsize=14, fontweight='bold')
+    ax.set_xticks(x)
+    ax.set_xticklabels(cities, rotation=45, ha='right')
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig('grouped_comparison.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print("✓ Created grouped_comparison.png")
 
 
 def create_scatter_plot(calculated_data):
-    """
-    Creates scatter plot of temperature vs AQI with UV as color.
+    """Creates scatter plot of temperature vs AQI with UV as color."""
+    plt.figure(figsize=(12, 8))
     
-    Input: 
-        - calculated_data: Dictionary with city data (dict)
+    scatter = plt.scatter(
+        calculated_data['avg_temps'],
+        calculated_data['avg_aqi'],
+        c=calculated_data['avg_uv'],
+        s=200,
+        cmap='YlOrRd',
+        alpha=0.6,
+        edgecolors='black',
+        linewidth=1.5
+    )
     
-    Output: 
-        - Saves 'scatter_temp_aqi.png' image file
+    # Add city labels
+    for i, city in enumerate(calculated_data['cities']):
+        plt.annotate(city, 
+                    (calculated_data['avg_temps'][i], calculated_data['avg_aqi'][i]),
+                    fontsize=8,
+                    alpha=0.7)
     
-    Visualization:
-    - X-axis: Temperature
-    - Y-axis: AQI
-    - Point color: UV index intensity (colormap)
-    - Color bar showing UV scale
-    - Reveals correlations between metrics
-    """
-    pass
+    plt.colorbar(scatter, label='UV Index')
+    plt.xlabel('Average Temperature (°F)', fontsize=12, fontweight='bold')
+    plt.ylabel('Average AQI', fontsize=12, fontweight='bold')
+    plt.title('Temperature vs Air Quality (Color = UV Index)', fontsize=14, fontweight='bold')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig('scatter_temp_aqi.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print("✓ Created scatter_temp_aqi.png")
 
 
 def create_horizontal_rankings(calculated_data):
-    """
-    Creates three separate horizontal bar charts for individual rankings.
+    """Creates three separate horizontal bar charts for individual rankings."""
     
-    Input: 
-        - calculated_data: Dictionary with city data (dict)
+    # Temperature ranking (closest to 70°F is best)
+    temp_deviations = [abs(t - 70) for t in calculated_data['avg_temps']]
+    temp_sorted_idx = np.argsort(temp_deviations)[:10]
     
-    Output: 
-        - Saves three image files:
-            * 'ranking_temperature.png'
-            * 'ranking_uv.png'
-            * 'ranking_aqi.png'
+    plt.figure(figsize=(10, 6))
+    cities_temp = [calculated_data['cities'][i] for i in temp_sorted_idx]
+    temps_sorted = [calculated_data['avg_temps'][i] for i in temp_sorted_idx]
+    plt.barh(range(len(cities_temp)), temps_sorted, color='#FF6B6B')
+    plt.yticks(range(len(cities_temp)), cities_temp)
+    plt.xlabel('Average Temperature (°F)', fontsize=12, fontweight='bold')
+    plt.title('Cities Ranked by Most Comfortable Temperature', fontsize=14, fontweight='bold')
+    plt.axvline(x=70, color='green', linestyle='--', alpha=0.5, label='Ideal (70°F)')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig('ranking_temperature.png', dpi=300, bbox_inches='tight')
+    plt.close()
     
-    Visualizations:
-    - Three separate charts
-    - Each ranks cities by one metric
-    - Horizontal bars for easier city name reading
-    - Shows which cities excel in specific categories
-    """
-    pass
+    # UV ranking (lower is better)
+    uv_sorted_idx = np.argsort(calculated_data['avg_uv'])[:10]
+    
+    plt.figure(figsize=(10, 6))
+    cities_uv = [calculated_data['cities'][i] for i in uv_sorted_idx]
+    uvs_sorted = [calculated_data['avg_uv'][i] for i in uv_sorted_idx]
+    plt.barh(range(len(cities_uv)), uvs_sorted, color='#4ECDC4')
+    plt.yticks(range(len(cities_uv)), cities_uv)
+    plt.xlabel('Average UV Index', fontsize=12, fontweight='bold')
+    plt.title('Cities Ranked by Lowest UV Index', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig('ranking_uv.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # AQI ranking (lower is better)
+    aqi_sorted_idx = np.argsort(calculated_data['avg_aqi'])[:10]
+    
+    plt.figure(figsize=(10, 6))
+    cities_aqi = [calculated_data['cities'][i] for i in aqi_sorted_idx]
+    aqis_sorted = [calculated_data['avg_aqi'][i] for i in aqi_sorted_idx]
+    plt.barh(range(len(cities_aqi)), aqis_sorted, color='#95E1D3')
+    plt.yticks(range(len(cities_aqi)), cities_aqi)
+    plt.xlabel('Average AQI', fontsize=12, fontweight='bold')
+    plt.title('Cities Ranked by Best Air Quality', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig('ranking_aqi.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print("✓ Created ranking_temperature.png")
+    print("✓ Created ranking_uv.png")
+    print("✓ Created ranking_aqi.png")
 
 
 def create_heatmap(calculated_data):
-    """
-    Creates color-coded heatmap grid of all metrics.
+    """Creates color-coded heatmap grid of all metrics."""
+    # Prepare data matrix
+    cities = calculated_data['cities']
     
-    Input: 
-        - calculated_data: Dictionary with city data (dict)
+    # Normalize all values to 0-1 scale for consistent coloring
+    temps_norm = np.array([abs(t - 70) / 30 for t in calculated_data['avg_temps']])
+    uvs_norm = np.array(calculated_data['avg_uv']) / 12.0
+    aqis_norm = np.array(calculated_data['avg_aqi']) / 6.0
+    scores_norm = np.array(calculated_data['safety_scores'])
     
-    Output: 
-        - Saves 'heatmap_all_metrics.png' image file
+    # Create matrix (rows=cities, cols=metrics)
+    data_matrix = np.column_stack([temps_norm, uvs_norm, aqis_norm, scores_norm])
     
-    Visualization:
-    - Rows: Cities
-    - Columns: Temp, UV, AQI, Safety Score
-    - Color coding: Green (better) to Red (worse)
-    - Comprehensive at-a-glance comparison
-    - Normalized values for comparison
-    """
-    pass
+    # Sort by safety score
+    sorted_indices = np.argsort(calculated_data['safety_scores'])
+    data_matrix = data_matrix[sorted_indices]
+    cities_sorted = [cities[i] for i in sorted_indices]
+    
+    fig, ax = plt.subplots(figsize=(10, 14))
+    im = ax.imshow(data_matrix, cmap='RdYlGn_r', aspect='auto', vmin=0, vmax=1)
+    
+    # Set ticks and labels
+    ax.set_xticks(np.arange(4))
+    ax.set_yticks(np.arange(len(cities_sorted)))
+    ax.set_xticklabels(['Temp\nDeviation', 'UV\nIndex', 'Air\nQuality', 'Safety\nScore'])
+    ax.set_yticklabels(cities_sorted)
+    
+    # Rotate the tick labels for better readability
+    plt.setp(ax.get_xticklabels(), rotation=0, ha="center", rotation_mode="anchor")
+    
+    # Add colorbar
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.set_label('Normalized Value (Green=Better, Red=Worse)', rotation=270, labelpad=20)
+    
+    # Add title
+    ax.set_title('Heatmap of All Weather Metrics by City\n(Cities ranked by safety score)', 
+                 fontsize=14, fontweight='bold', pad=20)
+    
+    plt.tight_layout()
+    plt.savefig('heatmap_all_metrics.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print("✓ Created heatmap_all_metrics.png")
 
 
 def create_visualizations(calculated_data):
-    """
-    Master function that generates all visualizations.
+    """Master function that generates all visualizations."""
+    print("\n" + "="*50)
+    print("CREATING VISUALIZATIONS")
+    print("="*50)
     
-    Input: 
-        - calculated_data: Dictionary with city data (dict)
+    if not calculated_data['cities']:
+        print("No data available for visualizations")
+        return
     
-    Output: 
-        - All visualization image files saved
+    create_safety_ranking_chart(calculated_data)
+    create_grouped_comparison_chart(calculated_data)
+    create_scatter_plot(calculated_data)
+    create_horizontal_rankings(calculated_data)
+    create_heatmap(calculated_data)
     
-    Process:
-    - Calls all individual visualization functions
-    - Ensures consistent styling across charts
-    - Saves all files with descriptive names
-    """
-    pass
+    print("\n✓ All visualizations created successfully!")
 
 
 # ============================================================================
@@ -707,31 +880,29 @@ def create_visualizations(calculated_data):
 def main():
     """
     Main execution function that coordinates the entire program.
-    
-    Process:
-    1. Initialize database
-    2. Collect data from APIs (if needed)
-    3. Perform calculations
-    4. Create visualizations
     """
-    print("Initializing database...")
+    print("="*60)
+    print("WEATHER DATA ANALYSIS PROJECT")
+    print("="*60)
+    
+    print("\nInitializing database...")
     init_database()
     
     # Collect weather data (Ella's part)
     print("\n" + "="*50)
-    print("COLLECTING WEATHER DATA")
+    print("COLLECTING WEATHER DATA (Ella)")
     print("="*50)
     store_weather(CITIES, OPENWEATHER_API_KEY)
     
     # Collect UV data (Emma's part)
     print("\n" + "="*50)
-    print("COLLECTING UV DATA")
+    print("COLLECTING UV DATA (Emma)")
     print("="*50)
     store_uv(CITIES, OPENUV_API_KEY, CITY_COORDS)
     
     # Collect air quality data (Mindy's part)
     print("\n" + "="*50)
-    print("COLLECTING AIR QUALITY DATA")
+    print("COLLECTING AIR QUALITY DATA (Mindy)")
     print("="*50)
     store_air_quality(CITIES, WEATHERAPI_KEY)
     
@@ -748,16 +919,45 @@ def main():
     conn = sqlite3.connect(DB_NAME)
     
     # Calculate averages
+    print("\nCalculating average temperature...")
     avg_temp = calculate_avg_temp(conn)
+    
+    print("Calculating average UV index...")
     avg_uv = calculate_avg_uv(conn)
+    
+    print("Calculating average AQI...")
     avg_aqi = calculate_avg_aqi(conn)
     
-    print(f"\nOverall Average Temperature: {avg_temp:.2f}°F" if avg_temp else "No temperature data")
+    print("\nCalculating safety scores...")
+    safety_scores = calculate_safety_score(conn)
+    
+    # Display results
+    print("\n" + "="*50)
+    print("SUMMARY RESULTS")
+    print("="*50)
+    print(f"Overall Average Temperature: {avg_temp:.2f}°F" if avg_temp else "No temperature data")
     print(f"Overall Average UV Index: {avg_uv:.2f}" if avg_uv else "No UV data")
     print(f"Overall Average AQI: {avg_aqi:.2f}" if avg_aqi else "No AQI data")
+    
+    # Get data for visualizations
+    print("\nRetrieving data for visualizations...")
+    calculated_data = get_calculated_data(conn)
+    
+    # Create visualizations
+    if calculated_data['cities']:
+        create_visualizations(calculated_data)
+    else:
+        print("Insufficient data for visualizations. Run data collection multiple times over 4+ days.")
     
     conn.close()
     
     print("\n" + "="*50)
-    print("COMPLETE! Check calculations_output.txt for detailed results.")
+    print("COMPLETE!")
     print("="*50)
+    print("✓ Check calculations_output.txt for detailed results")
+    print("✓ Check PNG files for visualizations")
+    print("="*50)
+
+
+if __name__ == "__main__":
+    main()
