@@ -6,9 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
 
-# ============================================================================
-# API KEY LOADER FUNCTION
-# ============================================================================
+
 
 def get_api_key(filename):
     '''
@@ -26,25 +24,18 @@ def get_api_key(filename):
     except:
         return None
 
-# ============================================================================
-# CONSTANTS AND CONFIGURATION
-# ============================================================================
 
-# Load API keys from text files
 OPENWEATHER_API_KEY = get_api_key('openweather_api_key.txt')
 OPENUV_API_KEY = get_api_key('openuv_api_key.txt')
 WEATHERAPI_KEY = get_api_key('weatherapi_api_key.txt')
 
-# API URLs
 OPENWEATHER_BASE_URL = 'http://api.openweathermap.org/data/2.5/weather'
 OPENUV_BASE_URL = 'https://api.openuv.io/api/v1/uv'
 WEATHERAPI_BASE_URL = 'http://api.weatherapi.com/v1/current.json'
 
-# Database settings
 DB_NAME = 'weather_data.db'
 OUTPUT_FILE = 'calculations_output.txt'
 
-# Cities list (25 cities)
 CITIES = [
     "New York", "Los Angeles", "Chicago", "Houston", "Phoenix",
     "Philadelphia", "San Antonio", "San Diego", "Dallas", "Austin",
@@ -53,7 +44,6 @@ CITIES = [
     "Detroit", "Portland", "Las Vegas", "Memphis", "Louisville"
 ]
 
-# City coordinates for UV API (latitude, longitude)
 CITY_COORDS = {
     "New York": (40.7128, -74.0060),
     "Los Angeles": (34.0522, -118.2437),
@@ -83,16 +73,12 @@ CITY_COORDS = {
 }
 
 
-# ============================================================================
-# DATABASE SETUP FUNCTIONS
-# ============================================================================
 
 def init_database():
     """Initializes the database and creates all necessary tables."""
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
     
-    # Cities table
     cur.execute('''
         CREATE TABLE IF NOT EXISTS Cities (
             city_id INTEGER PRIMARY KEY,
@@ -100,7 +86,6 @@ def init_database():
         )
     ''')
     
-    # Weather Data table
     cur.execute('''
         CREATE TABLE IF NOT EXISTS Weather_Data (
             id INTEGER PRIMARY KEY,
@@ -112,7 +97,6 @@ def init_database():
         )
     ''')
     
-    # UV Data table
     cur.execute('''
         CREATE TABLE IF NOT EXISTS UV_Data (
             id INTEGER PRIMARY KEY,
@@ -123,7 +107,6 @@ def init_database():
         )
     ''')
     
-    # Air Quality Data table
     cur.execute('''
         CREATE TABLE IF NOT EXISTS Air_Quality_Data (
             id INTEGER PRIMARY KEY,
@@ -139,9 +122,7 @@ def init_database():
     print("Database initialized successfully!")
 
 
-# ============================================================================
-# DATA COLLECTION FUNCTIONS - ELLA (Weather)
-# ============================================================================
+
 
 def store_weather(city_names, api_key, db_name=DB_NAME):
     """Fetches weather data from OpenWeatherMap API and stores it in database."""
@@ -157,7 +138,6 @@ def store_weather(city_names, api_key, db_name=DB_NAME):
             break
         
         try:
-            # Check if data already exists for today
             cur.execute('''
                 SELECT COUNT(*) FROM Weather_Data
                 JOIN Cities ON Weather_Data.city_id = Cities.city_id
@@ -168,7 +148,6 @@ def store_weather(city_names, api_key, db_name=DB_NAME):
                 print(f"Weather data for {city} already exists for today, skipping...")
                 continue
             
-            # Make API request
             params = {
                 'q': city,
                 'appid': api_key,
@@ -179,12 +158,10 @@ def store_weather(city_names, api_key, db_name=DB_NAME):
             response.raise_for_status()
             data = response.json()
             
-            # Extract weather data
             temperature = data['main']['temp']
             weather_condition = data['weather'][0]['main']
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
-            # Get or create city_id
             cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city,))
             result = cur.fetchone()
             
@@ -197,12 +174,10 @@ def store_weather(city_names, api_key, db_name=DB_NAME):
                 cur.execute('INSERT INTO Cities (city_id, city_name) VALUES (?, ?)', 
                            (city_id, city))
             
-            # Get next id for Weather_Data
             cur.execute('SELECT MAX(id) FROM Weather_Data')
             max_id = cur.fetchone()[0]
             weather_id = 1 if max_id is None else max_id + 1
             
-            # Insert weather data
             cur.execute('''
                 INSERT INTO Weather_Data (id, city_id, temperature, weather_condition, timestamp)
                 VALUES (?, ?, ?, ?, ?)
@@ -223,9 +198,7 @@ def store_weather(city_names, api_key, db_name=DB_NAME):
     return store_count
 
 
-# ============================================================================
-# DATA COLLECTION FUNCTIONS - EMMA (UV)
-# ============================================================================
+
 
 def store_uv(city_names, api_key, city_coordinates, db_name=DB_NAME):
     """Fetches UV data from OpenUV API and stores it in database."""
@@ -241,7 +214,6 @@ def store_uv(city_names, api_key, city_coordinates, db_name=DB_NAME):
             break
         
         try:
-            # Check if data already exists for today
             cur.execute('''
                 SELECT COUNT(*) FROM UV_Data
                 JOIN Cities ON UV_Data.city_id = Cities.city_id
@@ -268,7 +240,6 @@ def store_uv(city_names, api_key, city_coordinates, db_name=DB_NAME):
             uv_index = data['result']['uv']
             timestamp = data['result']['uv_time']
             
-            # Get or create city_id
             cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city,))
             result = cur.fetchone()
             
@@ -281,12 +252,10 @@ def store_uv(city_names, api_key, city_coordinates, db_name=DB_NAME):
                 cur.execute('INSERT INTO Cities (city_id, city_name) VALUES (?, ?)', 
                            (city_id, city))
             
-            # Get next id for UV_Data
             cur.execute('SELECT MAX(id) FROM UV_Data')
             max_id = cur.fetchone()[0]
             uv_id = 1 if max_id is None else max_id + 1
             
-            # Insert UV data
             cur.execute('''
                 INSERT INTO UV_Data (id, city_id, uv_index, timestamp)
                 VALUES (?, ?, ?, ?)
@@ -307,9 +276,7 @@ def store_uv(city_names, api_key, city_coordinates, db_name=DB_NAME):
     return stored_count
 
 
-# ============================================================================
-# DATA COLLECTION FUNCTIONS - MINDY (Air Quality)
-# ============================================================================
+
 
 def store_air_quality(city_names, api_key, db_name=DB_NAME):
     """Fetches air quality data from WeatherAPI and stores it in database."""
@@ -325,7 +292,6 @@ def store_air_quality(city_names, api_key, db_name=DB_NAME):
             break
         
         try:
-            # Check if data already exists for today
             cur.execute('''
                 SELECT COUNT(*) FROM Air_Quality_Data
                 JOIN Cities ON Air_Quality_Data.city_id = Cities.city_id
@@ -336,7 +302,6 @@ def store_air_quality(city_names, api_key, db_name=DB_NAME):
                 print(f"Air quality data for {city} already exists for today, skipping...")
                 continue
             
-            # Make API request
             params = {
                 'key': api_key,
                 'q': city,
@@ -350,7 +315,6 @@ def store_air_quality(city_names, api_key, db_name=DB_NAME):
             aqi_value = data['current']['air_quality']['us-epa-index']
             timestamp = data['current']['last_updated']
             
-            # Get or create city_id
             cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city,))
             result = cur.fetchone()
             
@@ -363,12 +327,10 @@ def store_air_quality(city_names, api_key, db_name=DB_NAME):
                 cur.execute('INSERT INTO Cities (city_id, city_name) VALUES (?, ?)', 
                            (city_id, city))
             
-            # Get next id for Air_Quality_Data
             cur.execute('SELECT MAX(id) FROM Air_Quality_Data')
             max_id = cur.fetchone()[0]
             aqi_id = 1 if max_id is None else max_id + 1
             
-            # Insert air quality data
             cur.execute('''
                 INSERT INTO Air_Quality_Data (id, city_id, aqi_value, timestamp)
                 VALUES (?, ?, ?, ?)
@@ -389,9 +351,6 @@ def store_air_quality(city_names, api_key, db_name=DB_NAME):
     return store_count
 
 
-# ============================================================================
-# CALCULATION FUNCTIONS - ELLA
-# ============================================================================
 
 def calculate_avg_temp(db_conn, city_id=None):
     """Calculates average temperature from weather data."""
@@ -447,9 +406,7 @@ def calculate_avg_temp(db_conn, city_id=None):
             return None
 
 
-# ============================================================================
-# CALCULATION FUNCTIONS - EMMA
-# ============================================================================
+
 
 def calculate_avg_uv(db_conn, city_id=None):
     """Calculates average UV index from UV data."""
@@ -485,9 +442,7 @@ def calculate_avg_uv(db_conn, city_id=None):
         return avg_uv if avg_uv else 0.0
 
 
-# ============================================================================
-# CALCULATION FUNCTIONS - MINDY
-# ============================================================================
+
 
 def calculate_avg_aqi(db_conn, city_id=None):
     """Calculates average Air Quality Index from air quality data."""
@@ -541,9 +496,7 @@ def calculate_avg_aqi(db_conn, city_id=None):
             return None
 
 
-# ============================================================================
-# CALCULATION FUNCTIONS - EVERYONE (Safety Score)
-# ============================================================================
+
 
 def calculate_safety_score(db_conn):
     """
@@ -552,14 +505,12 @@ def calculate_safety_score(db_conn):
     """
     cur = db_conn.cursor()
     
-    # Get all cities that have all three types of data
     cur.execute('SELECT city_id, city_name FROM Cities')
     cities = cur.fetchall()
     
     safety_scores = {}
     
     for city_id, city_name in cities:
-        # Get average temp for this city
         cur.execute('''
             SELECT AVG(temperature) 
             FROM Weather_Data 
@@ -567,7 +518,6 @@ def calculate_safety_score(db_conn):
         ''', (city_id,))
         temp_result = cur.fetchone()
         
-        # Get average UV for this city
         cur.execute('''
             SELECT AVG(uv_index) 
             FROM UV_Data 
@@ -575,7 +525,6 @@ def calculate_safety_score(db_conn):
         ''', (city_id,))
         uv_result = cur.fetchone()
         
-        # Get average AQI for this city
         cur.execute('''
             SELECT AVG(aqi_value) 
             FROM Air_Quality_Data 
@@ -583,34 +532,28 @@ def calculate_safety_score(db_conn):
         ''', (city_id,))
         aqi_result = cur.fetchone()
         
-        # Only calculate safety score if city has all three data types
         if temp_result[0] and uv_result[0] and aqi_result[0]:
             avg_temp = temp_result[0]
             avg_uv = uv_result[0]
             avg_aqi = aqi_result[0]
             
-            # Calculate normalized scores
             temp_score = abs(avg_temp - 70) / 30.0
             uv_score = avg_uv / 12.0
             aqi_score = avg_aqi / 6.0
             
-            # Composite score
             composite_score = (temp_score * 0.3) + (uv_score * 0.3) + (aqi_score * 0.4)
             
             safety_scores[city_name] = composite_score
     
-    # Sort by safety score using a simple bubble sort
     sorted_list = []
     for city, score in safety_scores.items():
         sorted_list.append((city, score))
     
-    # Bubble sort
     for i in range(len(sorted_list)):
         for j in range(len(sorted_list) - 1 - i):
             if sorted_list[j][1] > sorted_list[j + 1][1]:
                 sorted_list[j], sorted_list[j + 1] = sorted_list[j + 1], sorted_list[j]
     
-    # Write to file
     with open(OUTPUT_FILE, 'a') as f:
         f.write("\n" + "="*50 + "\n")
         f.write("OUTDOOR ACTIVITY SAFETY SCORES\n")
@@ -626,15 +569,12 @@ def calculate_safety_score(db_conn):
     return dict(sorted_list)
 
 
-# ============================================================================
-# DATA RETRIEVAL FOR VISUALIZATIONS - EVERYONE
-# ============================================================================
+
 
 def get_calculated_data(db_conn):
     """Retrieves all calculated data needed for visualizations."""
     cur = db_conn.cursor()
     
-    # Get all cities
     cur.execute('SELECT city_id, city_name FROM Cities')
     cities_data = cur.fetchall()
     
@@ -645,25 +585,20 @@ def get_calculated_data(db_conn):
     safety_scores = []
     
     for city_id, city_name in cities_data:
-        # Get average temp
         cur.execute('SELECT AVG(temperature) FROM Weather_Data WHERE city_id = ?', (city_id,))
         temp_result = cur.fetchone()
         
-        # Get average UV
         cur.execute('SELECT AVG(uv_index) FROM UV_Data WHERE city_id = ?', (city_id,))
         uv_result = cur.fetchone()
         
-        # Get average AQI
         cur.execute('SELECT AVG(aqi_value) FROM Air_Quality_Data WHERE city_id = ?', (city_id,))
         aqi_result = cur.fetchone()
         
-        # Only include cities with all three data types
         if temp_result[0] and uv_result[0] and aqi_result[0]:
             avg_temp = temp_result[0]
             avg_uv = uv_result[0]
             avg_aqi = aqi_result[0]
             
-            # Calculate safety score
             temp_score = abs(avg_temp - 70) / 30.0
             uv_score = avg_uv / 12.0
             aqi_score = avg_aqi / 6.0
@@ -683,19 +618,15 @@ def get_calculated_data(db_conn):
         'avg_aqi': avg_aqis
     }
 
-# VISUALIZATION FUNCTIONS - EVERYONE
 
 def create_safety_ranking_chart(calculated_data):
     """Creates ranked bar chart of top 10 safest cities."""
-    # Sort by safety score and get top 10
     city_score_pairs = []
     for i in range(len(calculated_data['cities'])):
         city_score_pairs.append((calculated_data['cities'][i], calculated_data['safety_scores'][i]))
     
-    # Sort by score (ascending - lower is better)
     city_score_pairs.sort(key=lambda x: x[1])
     
-    # Get top 10
     top_cities = [pair[0] for pair in city_score_pairs[:10]]
     top_scores = [pair[1] for pair in city_score_pairs[:10]]
     
@@ -715,7 +646,6 @@ def create_safety_ranking_chart(calculated_data):
 
 def create_grouped_comparison_chart(calculated_data):
     """Creates grouped bar chart comparing temperature, UV, and AQI."""
-    # Select 10 cities with best safety scores
     data_tuples = []
     for i in range(len(calculated_data['cities'])):
         data_tuples.append((
@@ -726,10 +656,8 @@ def create_grouped_comparison_chart(calculated_data):
             calculated_data['avg_aqi'][i]
         ))
     
-    # Sort by safety score
     data_tuples.sort(key=lambda x: x[1])
     
-    # Get top 10
     cities = [t[0] for t in data_tuples[:10]]
     temps = [t[2] for t in data_tuples[:10]]
     uvs = [t[3] for t in data_tuples[:10]]
@@ -740,8 +668,7 @@ def create_grouped_comparison_chart(calculated_data):
     
     fig, ax = plt.subplots(figsize=(14, 6))
     
-    # Normalize for visual comparison
-    temps_norm = [t / 100 * 10 for t in temps]  # Scale to similar range
+    temps_norm = [t / 100 * 10 for t in temps]  
     
     ax.bar(x - width, temps_norm, width, label='Temp (scaled)', color='#FF6B6B')
     ax.bar(x, uvs, width, label='UV Index', color='#4ECDC4')
@@ -774,7 +701,6 @@ def create_scatter_plot(calculated_data):
         linewidth=1.5
     )
     
-    # Add city labels
     for i, city in enumerate(calculated_data['cities']):
         plt.annotate(city, 
                     (calculated_data['avg_temps'][i], calculated_data['avg_aqi'][i]),
@@ -795,16 +721,13 @@ def create_scatter_plot(calculated_data):
 def create_horizontal_rankings(calculated_data):
     """Creates three separate horizontal bar charts for individual rankings."""
     
-    # Temperature ranking (closest to 70°F is best)
     temp_data = []
     for i in range(len(calculated_data['cities'])):
         temp_deviation = abs(calculated_data['avg_temps'][i] - 70)
         temp_data.append((calculated_data['cities'][i], calculated_data['avg_temps'][i], temp_deviation))
     
-    # Sort by deviation (ascending)
     temp_data.sort(key=lambda x: x[2])
     
-    # Get top 10
     cities_temp = [t[0] for t in temp_data[:10]]
     temps_sorted = [t[1] for t in temp_data[:10]]
     
@@ -819,15 +742,12 @@ def create_horizontal_rankings(calculated_data):
     plt.savefig('ranking_temperature.png', dpi=300, bbox_inches='tight')
     plt.close()
     
-    # UV ranking (lower is better)
     uv_data = []
     for i in range(len(calculated_data['cities'])):
         uv_data.append((calculated_data['cities'][i], calculated_data['avg_uv'][i]))
     
-    # Sort by UV (ascending)
     uv_data.sort(key=lambda x: x[1])
     
-    # Get top 10
     cities_uv = [t[0] for t in uv_data[:10]]
     uvs_sorted = [t[1] for t in uv_data[:10]]
     
@@ -840,15 +760,12 @@ def create_horizontal_rankings(calculated_data):
     plt.savefig('ranking_uv.png', dpi=300, bbox_inches='tight')
     plt.close()
     
-    # AQI ranking (lower is better)
     aqi_data = []
     for i in range(len(calculated_data['cities'])):
         aqi_data.append((calculated_data['cities'][i], calculated_data['avg_aqi'][i]))
     
-    # Sort by AQI (ascending)
     aqi_data.sort(key=lambda x: x[1])
     
-    # Get top 10
     cities_aqi = [t[0] for t in aqi_data[:10]]
     aqis_sorted = [t[1] for t in aqi_data[:10]]
     
@@ -868,7 +785,6 @@ def create_horizontal_rankings(calculated_data):
 
 def create_heatmap(calculated_data):
     """Creates color-coded heatmap grid of all metrics."""
-    # Prepare data matrix
     all_data = []
     for i in range(len(calculated_data['cities'])):
         temps_norm = abs(calculated_data['avg_temps'][i] - 70) / 30
@@ -885,35 +801,28 @@ def create_heatmap(calculated_data):
             scores_norm
         ))
     
-    # Sort by safety score
     all_data.sort(key=lambda x: x[1])
     
-    # Extract sorted data
     cities_sorted = [t[0] for t in all_data]
     data_matrix = []
     for t in all_data:
-        data_matrix.append([t[2], t[3], t[4], t[5]])  # temps_norm, uvs_norm, aqis_norm, scores_norm
+        data_matrix.append([t[2], t[3], t[4], t[5]])  
     
-    # Convert to numpy array for plotting
     data_matrix = np.array(data_matrix)
     
     fig, ax = plt.subplots(figsize=(10, 14))
     im = ax.imshow(data_matrix, cmap='RdYlGn_r', aspect='auto', vmin=0, vmax=1)
     
-    # Set ticks and labels
     ax.set_xticks(np.arange(4))
     ax.set_yticks(np.arange(len(cities_sorted)))
     ax.set_xticklabels(['Temp\nDeviation', 'UV\nIndex', 'Air\nQuality', 'Safety\nScore'])
     ax.set_yticklabels(cities_sorted)
     
-    # Rotate the tick labels for better readability
     plt.setp(ax.get_xticklabels(), rotation=0, ha="center", rotation_mode="anchor")
     
-    # Add colorbar
     cbar = plt.colorbar(im, ax=ax)
     cbar.set_label('Normalized Value (Green=Better, Red=Worse)', rotation=270, labelpad=20)
     
-    # Add title
     ax.set_title('Heatmap of All Weather Metrics by City\n(Cities ranked by safety score)', 
                  fontsize=14, fontweight='bold', pad=20)
     
@@ -942,9 +851,7 @@ def create_visualizations(calculated_data):
     print("\n✓ All visualizations created successfully!")
 
 
-# ============================================================================
-# MAIN EXECUTION
-# ============================================================================
+
 
 def main():
     """
@@ -957,37 +864,31 @@ def main():
     print("\nInitializing database...")
     init_database()
     
-    # Collect weather data (Ella's part)
     print("\n" + "="*50)
     print("COLLECTING WEATHER DATA (Ella)")
     print("="*50)
     store_weather(CITIES, OPENWEATHER_API_KEY)
     
-    # Collect UV data (Emma's part)
     print("\n" + "="*50)
     print("COLLECTING UV DATA (Emma)")
     print("="*50)
     store_uv(CITIES, OPENUV_API_KEY, CITY_COORDS)
     
-    # Collect air quality data (Mindy's part)
     print("\n" + "="*50)
     print("COLLECTING AIR QUALITY DATA (Mindy)")
     print("="*50)
     store_air_quality(CITIES, WEATHERAPI_KEY)
     
-    # Perform calculations
     print("\n" + "="*50)
     print("PERFORMING CALCULATIONS")
     print("="*50)
     
-    # Clear the output file
     with open(OUTPUT_FILE, 'w') as f:
         f.write("WEATHER DATA ANALYSIS RESULTS\n")
         f.write("="*50 + "\n")
     
     conn = sqlite3.connect(DB_NAME)
     
-    # Calculate averages
     print("\nCalculating average temperature...")
     avg_temp = calculate_avg_temp(conn)
     
@@ -1000,7 +901,6 @@ def main():
     print("\nCalculating safety scores...")
     safety_scores = calculate_safety_score(conn)
     
-    # Display results
     print("\n" + "="*50)
     print("SUMMARY RESULTS")
     print("="*50)
@@ -1008,11 +908,9 @@ def main():
     print(f"Overall Average UV Index: {avg_uv:.2f}" if avg_uv else "No UV data")
     print(f"Overall Average AQI: {avg_aqi:.2f}" if avg_aqi else "No AQI data")
     
-    # Get data for visualizations
     print("\nRetrieving data for visualizations...")
     calculated_data = get_calculated_data(conn)
     
-    # Create visualizations
     if calculated_data['cities']:
         create_visualizations(calculated_data)
     else:
