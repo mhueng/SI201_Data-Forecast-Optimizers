@@ -1,3 +1,5 @@
+<<<<<<< HEAD
+=======
 # UV API - Emma Radley.py
 
 import requests
@@ -212,3 +214,4 @@ if __name__ == "__main__":
     print("✓ Results written to calculations_output.txt")
     conn.close()
     """
+>>>>>>> 4cd19eaf9474c323b1e414bb40b0828e61b303f6
