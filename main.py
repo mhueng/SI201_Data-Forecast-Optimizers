@@ -530,56 +530,66 @@ def calculate_safety_score(db_conn):
     """
     Calculates composite outdoor activity safety score for each city.
     Lower score = safer for outdoor activities.
-    
-    Formula:
-    - UV contributes 30% (normalized, lower is better)
-    - AQI contributes 40% (normalized, lower is better)  
-    - Temperature deviation from 70°F contributes 30% (closer to 70 is better)
     """
     cur = db_conn.cursor()
     
-    # Get all data joined together
-    cur.execute('''
-        SELECT 
-            c.city_name,
-            AVG(w.temperature) as avg_temp,
-            AVG(u.uv_index) as avg_uv,
-            AVG(a.aqi_value) as avg_aqi
-        FROM Cities c
-        LEFT JOIN Weather_Data w ON c.city_id = w.city_id
-        LEFT JOIN UV_Data u ON c.city_id = u.city_id
-        LEFT JOIN Air_Quality_Data a ON c.city_id = a.city_id
-        GROUP BY c.city_id, c.city_name
-        HAVING avg_temp IS NOT NULL AND avg_uv IS NOT NULL AND avg_aqi IS NOT NULL
-        ORDER BY c.city_name
-    ''')
+    # Get all cities that have all three types of data
+    cur.execute('SELECT city_id, city_name FROM Cities')
+    cities = cur.fetchall()
     
-    results = cur.fetchall()
-    
-    if not results:
-        print("Insufficient data for safety score calculation")
-        return {}
-    
-    # Calculate safety scores
     safety_scores = {}
     
-    for city_name, avg_temp, avg_uv, avg_aqi in results:
-        # Temperature score: distance from ideal 70°F, normalized
-        temp_score = abs(avg_temp - 70) / 30.0  # Normalize to ~0-1 range
+    for city_id, city_name in cities:
+        # Get average temp for this city
+        cur.execute('''
+            SELECT AVG(temperature) 
+            FROM Weather_Data 
+            WHERE city_id = ?
+        ''', (city_id,))
+        temp_result = cur.fetchone()
         
-        # UV score: normalized (assume max UV of 12)
-        uv_score = avg_uv / 12.0
+        # Get average UV for this city
+        cur.execute('''
+            SELECT AVG(uv_index) 
+            FROM UV_Data 
+            WHERE city_id = ?
+        ''', (city_id,))
+        uv_result = cur.fetchone()
         
-        # AQI score: normalized (assume max AQI of 6)
-        aqi_score = avg_aqi / 6.0
+        # Get average AQI for this city
+        cur.execute('''
+            SELECT AVG(aqi_value) 
+            FROM Air_Quality_Data 
+            WHERE city_id = ?
+        ''', (city_id,))
+        aqi_result = cur.fetchone()
         
-        # Composite score (lower is better)
-        composite_score = (temp_score * 0.3) + (uv_score * 0.3) + (aqi_score * 0.4)
-        
-        safety_scores[city_name] = composite_score
+        # Only calculate safety score if city has all three data types
+        if temp_result[0] and uv_result[0] and aqi_result[0]:
+            avg_temp = temp_result[0]
+            avg_uv = uv_result[0]
+            avg_aqi = aqi_result[0]
+            
+            # Calculate normalized scores
+            temp_score = abs(avg_temp - 70) / 30.0
+            uv_score = avg_uv / 12.0
+            aqi_score = avg_aqi / 6.0
+            
+            # Composite score
+            composite_score = (temp_score * 0.3) + (uv_score * 0.3) + (aqi_score * 0.4)
+            
+            safety_scores[city_name] = composite_score
     
-    # Sort by safety score (lowest/safest first)
-    sorted_scores = sorted(safety_scores.items(), key=lambda x: x[1])
+    # Sort by safety score using a simple bubble sort
+    sorted_list = []
+    for city, score in safety_scores.items():
+        sorted_list.append((city, score))
+    
+    # Bubble sort
+    for i in range(len(sorted_list)):
+        for j in range(len(sorted_list) - 1 - i):
+            if sorted_list[j][1] > sorted_list[j + 1][1]:
+                sorted_list[j], sorted_list[j + 1] = sorted_list[j + 1], sorted_list[j]
     
     # Write to file
     with open(OUTPUT_FILE, 'a') as f:
@@ -590,11 +600,11 @@ def calculate_safety_score(db_conn):
         f.write(f"{'Rank':<6} {'City':<25} {'Safety Score':<15}\n")
         f.write("-" * 50 + "\n")
         
-        for rank, (city, score) in enumerate(sorted_scores, 1):
+        for rank, (city, score) in enumerate(sorted_list, 1):
             f.write(f"{rank:<6} {city:<25} {score:.4f}\n")
             print(f"{rank}. {city}: {score:.4f}")
     
-    return dict(sorted_scores)
+    return dict(sorted_list)
 
 
 # ============================================================================
@@ -602,28 +612,12 @@ def calculate_safety_score(db_conn):
 # ============================================================================
 
 def get_calculated_data(db_conn):
-    """
-    Retrieves all calculated data needed for visualizations.
-    """
+    """Retrieves all calculated data needed for visualizations."""
     cur = db_conn.cursor()
     
-    # Get comprehensive city data
-    cur.execute('''
-        SELECT 
-            c.city_name,
-            AVG(w.temperature) as avg_temp,
-            AVG(u.uv_index) as avg_uv,
-            AVG(a.aqi_value) as avg_aqi
-        FROM Cities c
-        LEFT JOIN Weather_Data w ON c.city_id = w.city_id
-        LEFT JOIN UV_Data u ON c.city_id = u.city_id
-        LEFT JOIN Air_Quality_Data a ON c.city_id = a.city_id
-        GROUP BY c.city_id, c.city_name
-        HAVING avg_temp IS NOT NULL AND avg_uv IS NOT NULL AND avg_aqi IS NOT NULL
-        ORDER BY c.city_name
-    ''')
-    
-    results = cur.fetchall()
+    # Get all cities
+    cur.execute('SELECT city_id, city_name FROM Cities')
+    cities_data = cur.fetchall()
     
     cities = []
     avg_temps = []
@@ -631,18 +625,36 @@ def get_calculated_data(db_conn):
     avg_aqis = []
     safety_scores = []
     
-    for city_name, avg_temp, avg_uv, avg_aqi in results:
-        # Calculate safety score
-        temp_score = abs(avg_temp - 70) / 30.0
-        uv_score = avg_uv / 12.0
-        aqi_score = avg_aqi / 6.0
-        composite_score = (temp_score * 0.3) + (uv_score * 0.3) + (aqi_score * 0.4)
+    for city_id, city_name in cities_data:
+        # Get average temp
+        cur.execute('SELECT AVG(temperature) FROM Weather_Data WHERE city_id = ?', (city_id,))
+        temp_result = cur.fetchone()
         
-        cities.append(city_name)
-        avg_temps.append(avg_temp)
-        avg_uvs.append(avg_uv)
-        avg_aqis.append(avg_aqi)
-        safety_scores.append(composite_score)
+        # Get average UV
+        cur.execute('SELECT AVG(uv_index) FROM UV_Data WHERE city_id = ?', (city_id,))
+        uv_result = cur.fetchone()
+        
+        # Get average AQI
+        cur.execute('SELECT AVG(aqi_value) FROM Air_Quality_Data WHERE city_id = ?', (city_id,))
+        aqi_result = cur.fetchone()
+        
+        # Only include cities with all three data types
+        if temp_result[0] and uv_result[0] and aqi_result[0]:
+            avg_temp = temp_result[0]
+            avg_uv = uv_result[0]
+            avg_aqi = aqi_result[0]
+            
+            # Calculate safety score
+            temp_score = abs(avg_temp - 70) / 30.0
+            uv_score = avg_uv / 12.0
+            aqi_score = avg_aqi / 6.0
+            composite_score = (temp_score * 0.3) + (uv_score * 0.3) + (aqi_score * 0.4)
+            
+            cities.append(city_name)
+            avg_temps.append(avg_temp)
+            avg_uvs.append(avg_uv)
+            avg_aqis.append(avg_aqi)
+            safety_scores.append(composite_score)
     
     return {
         'cities': cities,
@@ -652,7 +664,6 @@ def get_calculated_data(db_conn):
         'avg_aqi': avg_aqis
     }
 
-
 # ============================================================================
 # VISUALIZATION FUNCTIONS - EVERYONE
 # ============================================================================
@@ -660,10 +671,16 @@ def get_calculated_data(db_conn):
 def create_safety_ranking_chart(calculated_data):
     """Creates ranked bar chart of top 10 safest cities."""
     # Sort by safety score and get top 10
-    sorted_indices = np.argsort(calculated_data['safety_scores'])[:10]
+    city_score_pairs = []
+    for i in range(len(calculated_data['cities'])):
+        city_score_pairs.append((calculated_data['cities'][i], calculated_data['safety_scores'][i]))
     
-    top_cities = [calculated_data['cities'][i] for i in sorted_indices]
-    top_scores = [calculated_data['safety_scores'][i] for i in sorted_indices]
+    # Sort by score (ascending - lower is better)
+    city_score_pairs.sort(key=lambda x: x[1])
+    
+    # Get top 10
+    top_cities = [pair[0] for pair in city_score_pairs[:10]]
+    top_scores = [pair[1] for pair in city_score_pairs[:10]]
     
     plt.figure(figsize=(12, 6))
     colors = plt.cm.viridis(np.linspace(0, 0.8, len(top_cities)))
@@ -678,15 +695,28 @@ def create_safety_ranking_chart(calculated_data):
     print("✓ Created safety_ranking.png")
 
 
+
 def create_grouped_comparison_chart(calculated_data):
     """Creates grouped bar chart comparing temperature, UV, and AQI."""
     # Select 10 cities with best safety scores
-    sorted_indices = np.argsort(calculated_data['safety_scores'])[:10]
+    data_tuples = []
+    for i in range(len(calculated_data['cities'])):
+        data_tuples.append((
+            calculated_data['cities'][i],
+            calculated_data['safety_scores'][i],
+            calculated_data['avg_temps'][i],
+            calculated_data['avg_uv'][i],
+            calculated_data['avg_aqi'][i]
+        ))
     
-    cities = [calculated_data['cities'][i] for i in sorted_indices]
-    temps = [calculated_data['avg_temps'][i] for i in sorted_indices]
-    uvs = [calculated_data['avg_uv'][i] for i in sorted_indices]
-    aqis = [calculated_data['avg_aqi'][i] for i in sorted_indices]
+    # Sort by safety score
+    data_tuples.sort(key=lambda x: x[1])
+    
+    # Get top 10
+    cities = [t[0] for t in data_tuples[:10]]
+    temps = [t[2] for t in data_tuples[:10]]
+    uvs = [t[3] for t in data_tuples[:10]]
+    aqis = [t[4] for t in data_tuples[:10]]
     
     x = np.arange(len(cities))
     width = 0.25
@@ -749,12 +779,19 @@ def create_horizontal_rankings(calculated_data):
     """Creates three separate horizontal bar charts for individual rankings."""
     
     # Temperature ranking (closest to 70°F is best)
-    temp_deviations = [abs(t - 70) for t in calculated_data['avg_temps']]
-    temp_sorted_idx = np.argsort(temp_deviations)[:10]
+    temp_data = []
+    for i in range(len(calculated_data['cities'])):
+        temp_deviation = abs(calculated_data['avg_temps'][i] - 70)
+        temp_data.append((calculated_data['cities'][i], calculated_data['avg_temps'][i], temp_deviation))
+    
+    # Sort by deviation (ascending)
+    temp_data.sort(key=lambda x: x[2])
+    
+    # Get top 10
+    cities_temp = [t[0] for t in temp_data[:10]]
+    temps_sorted = [t[1] for t in temp_data[:10]]
     
     plt.figure(figsize=(10, 6))
-    cities_temp = [calculated_data['cities'][i] for i in temp_sorted_idx]
-    temps_sorted = [calculated_data['avg_temps'][i] for i in temp_sorted_idx]
     plt.barh(range(len(cities_temp)), temps_sorted, color='#FF6B6B')
     plt.yticks(range(len(cities_temp)), cities_temp)
     plt.xlabel('Average Temperature (°F)', fontsize=12, fontweight='bold')
@@ -766,11 +803,18 @@ def create_horizontal_rankings(calculated_data):
     plt.close()
     
     # UV ranking (lower is better)
-    uv_sorted_idx = np.argsort(calculated_data['avg_uv'])[:10]
+    uv_data = []
+    for i in range(len(calculated_data['cities'])):
+        uv_data.append((calculated_data['cities'][i], calculated_data['avg_uv'][i]))
+    
+    # Sort by UV (ascending)
+    uv_data.sort(key=lambda x: x[1])
+    
+    # Get top 10
+    cities_uv = [t[0] for t in uv_data[:10]]
+    uvs_sorted = [t[1] for t in uv_data[:10]]
     
     plt.figure(figsize=(10, 6))
-    cities_uv = [calculated_data['cities'][i] for i in uv_sorted_idx]
-    uvs_sorted = [calculated_data['avg_uv'][i] for i in uv_sorted_idx]
     plt.barh(range(len(cities_uv)), uvs_sorted, color='#4ECDC4')
     plt.yticks(range(len(cities_uv)), cities_uv)
     plt.xlabel('Average UV Index', fontsize=12, fontweight='bold')
@@ -780,11 +824,18 @@ def create_horizontal_rankings(calculated_data):
     plt.close()
     
     # AQI ranking (lower is better)
-    aqi_sorted_idx = np.argsort(calculated_data['avg_aqi'])[:10]
+    aqi_data = []
+    for i in range(len(calculated_data['cities'])):
+        aqi_data.append((calculated_data['cities'][i], calculated_data['avg_aqi'][i]))
+    
+    # Sort by AQI (ascending)
+    aqi_data.sort(key=lambda x: x[1])
+    
+    # Get top 10
+    cities_aqi = [t[0] for t in aqi_data[:10]]
+    aqis_sorted = [t[1] for t in aqi_data[:10]]
     
     plt.figure(figsize=(10, 6))
-    cities_aqi = [calculated_data['cities'][i] for i in aqi_sorted_idx]
-    aqis_sorted = [calculated_data['avg_aqi'][i] for i in aqi_sorted_idx]
     plt.barh(range(len(cities_aqi)), aqis_sorted, color='#95E1D3')
     plt.yticks(range(len(cities_aqi)), cities_aqi)
     plt.xlabel('Average AQI', fontsize=12, fontweight='bold')
@@ -801,21 +852,33 @@ def create_horizontal_rankings(calculated_data):
 def create_heatmap(calculated_data):
     """Creates color-coded heatmap grid of all metrics."""
     # Prepare data matrix
-    cities = calculated_data['cities']
-    
-    # Normalize all values to 0-1 scale for consistent coloring
-    temps_norm = np.array([abs(t - 70) / 30 for t in calculated_data['avg_temps']])
-    uvs_norm = np.array(calculated_data['avg_uv']) / 12.0
-    aqis_norm = np.array(calculated_data['avg_aqi']) / 6.0
-    scores_norm = np.array(calculated_data['safety_scores'])
-    
-    # Create matrix (rows=cities, cols=metrics)
-    data_matrix = np.column_stack([temps_norm, uvs_norm, aqis_norm, scores_norm])
+    all_data = []
+    for i in range(len(calculated_data['cities'])):
+        temps_norm = abs(calculated_data['avg_temps'][i] - 70) / 30
+        uvs_norm = calculated_data['avg_uv'][i] / 12.0
+        aqis_norm = calculated_data['avg_aqi'][i] / 6.0
+        scores_norm = calculated_data['safety_scores'][i]
+        
+        all_data.append((
+            calculated_data['cities'][i],
+            calculated_data['safety_scores'][i],
+            temps_norm,
+            uvs_norm,
+            aqis_norm,
+            scores_norm
+        ))
     
     # Sort by safety score
-    sorted_indices = np.argsort(calculated_data['safety_scores'])
-    data_matrix = data_matrix[sorted_indices]
-    cities_sorted = [cities[i] for i in sorted_indices]
+    all_data.sort(key=lambda x: x[1])
+    
+    # Extract sorted data
+    cities_sorted = [t[0] for t in all_data]
+    data_matrix = []
+    for t in all_data:
+        data_matrix.append([t[2], t[3], t[4], t[5]])  # temps_norm, uvs_norm, aqis_norm, scores_norm
+    
+    # Convert to numpy array for plotting
+    data_matrix = np.array(data_matrix)
     
     fig, ax = plt.subplots(figsize=(10, 14))
     im = ax.imshow(data_matrix, cmap='RdYlGn_r', aspect='auto', vmin=0, vmax=1)
