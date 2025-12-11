@@ -80,13 +80,21 @@ def init_database():
     ''')
     
     cur.execute('''
+        CREATE TABLE IF NOT EXISTS Weather_Conditions (
+            condition_id INTEGER PRIMARY KEY,
+            condition_name TEXT UNIQUE
+        )
+    ''')
+    
+    cur.execute('''
         CREATE TABLE IF NOT EXISTS Weather_Data (
             id INTEGER PRIMARY KEY,
             city_id INTEGER,
             temperature REAL,
-            weather_condition TEXT,
+            condition_id INTEGER,
             timestamp TEXT,
-            FOREIGN KEY (city_id) REFERENCES Cities(city_id)
+            FOREIGN KEY (city_id) REFERENCES Cities(city_id),
+            FOREIGN KEY (condition_id) REFERENCES Weather_Conditions(condition_id)
         )
     ''')
     
@@ -141,7 +149,9 @@ def store_weather(city_names, api_key, db_name=DB_NAME):
             temperature = data['main']['temp']
             weather_condition = data['weather'][0]['main']
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+            current_date = datetime.now().strftime('%Y-%m-%d')
             
+            # Get or create city_id
             cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city,))
             result = cur.fetchone()
             
@@ -154,14 +164,37 @@ def store_weather(city_names, api_key, db_name=DB_NAME):
                 cur.execute('INSERT INTO Cities (city_id, city_name) VALUES (?, ?)', 
                            (city_id, city))
             
+            # Get or create condition_id
+            cur.execute('SELECT condition_id FROM Weather_Conditions WHERE condition_name = ?', (weather_condition,))
+            result = cur.fetchone()
+            
+            if result:
+                condition_id = result[0]
+            else:
+                cur.execute('SELECT MAX(condition_id) FROM Weather_Conditions')
+                max_id = cur.fetchone()[0]
+                condition_id = 1 if max_id is None else max_id + 1
+                cur.execute('INSERT INTO Weather_Conditions (condition_id, condition_name) VALUES (?, ?)', 
+                           (condition_id, weather_condition))
+            
+            # Check if data for this city on this date already exists
+            cur.execute('''
+                SELECT COUNT(*) FROM Weather_Data 
+                WHERE city_id = ? AND DATE(timestamp) = ?
+            ''', (city_id, current_date))
+            
+            if cur.fetchone()[0] > 0:
+                print(f'Weather data for {city} on {current_date} already exists, skipping...')
+                continue
+            
             cur.execute('SELECT MAX(id) FROM Weather_Data')
             max_id = cur.fetchone()[0]
             weather_id = 1 if max_id is None else max_id + 1
             
             cur.execute('''
-                INSERT INTO Weather_Data (id, city_id, temperature, weather_condition, timestamp)
+                INSERT INTO Weather_Data (id, city_id, temperature, condition_id, timestamp)
                 VALUES (?, ?, ?, ?, ?)
-            ''', (weather_id, city_id, temperature, weather_condition, timestamp))
+            ''', (weather_id, city_id, temperature, condition_id, timestamp))
             
             conn.commit()
             store_count += 1
@@ -214,6 +247,7 @@ def store_uv(city_names, api_key, city_coordinates, db_name=DB_NAME):
             
             uv_index = data['result']['uv']
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+            current_date = datetime.now().strftime('%Y-%m-%d')
             
             cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city,))
             result = cur.fetchone()
@@ -226,6 +260,16 @@ def store_uv(city_names, api_key, city_coordinates, db_name=DB_NAME):
                 city_id = 1 if max_id is None else max_id + 1
                 cur.execute('INSERT INTO Cities (city_id, city_name) VALUES (?, ?)', 
                            (city_id, city))
+            
+            # Check if data for this city on this date already exists
+            cur.execute('''
+                SELECT COUNT(*) FROM UV_Data 
+                WHERE city_id = ? AND DATE(timestamp) = ?
+            ''', (city_id, current_date))
+            
+            if cur.fetchone()[0] > 0:
+                print(f'UV data for {city} on {current_date} already exists, skipping...')
+                continue
             
             cur.execute('SELECT MAX(id) FROM UV_Data')
             max_id = cur.fetchone()[0]
@@ -284,6 +328,7 @@ def store_air_quality(city_names, api_key, db_name=DB_NAME):
             
             aqi_value = data['current']['air_quality']['us-epa-index']
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+            current_date = datetime.now().strftime('%Y-%m-%d')
             
             cur.execute('SELECT city_id FROM Cities WHERE city_name = ?', (city,))
             result = cur.fetchone()
@@ -296,6 +341,16 @@ def store_air_quality(city_names, api_key, db_name=DB_NAME):
                 city_id = 1 if max_id is None else max_id + 1
                 cur.execute('INSERT INTO Cities (city_id, city_name) VALUES (?, ?)', 
                            (city_id, city))
+            
+            # Check if data for this city on this date already exists
+            cur.execute('''
+                SELECT COUNT(*) FROM Air_Quality_Data 
+                WHERE city_id = ? AND DATE(timestamp) = ?
+            ''', (city_id, current_date))
+            
+            if cur.fetchone()[0] > 0:
+                print(f'Air quality data for {city} on {current_date} already exists, skipping...')
+                continue
             
             cur.execute('SELECT MAX(id) FROM Air_Quality_Data')
             max_id = cur.fetchone()[0]
