@@ -5,98 +5,98 @@ WEATHER DATA ANALYSIS RESULTS
 AVERAGE TEMPERATURE CALCULATIONS
 ==================================================
 
-Overall Average Temperature: 50.64°F
+Overall Average Temperature: 51.49°F
 
 Average Temperature by City:
 ----------------------------------------
-San Antonio              : 75.72°F
-Austin                   : 75.30°F
-Los Angeles              : 69.63°F
-San Diego                : 68.75°F
-Houston                  : 67.81°F
-Phoenix                  : 64.71°F
-Jacksonville             : 59.14°F
-Las Vegas                : 59.07°F
-Portland                 : 54.32°F
-Seattle                  : 52.12°F
-San Francisco            : 51.21°F
-Memphis                  : 49.69°F
-Dallas                   : 47.24°F
-Denver                   : 46.24°F
-Fort Worth               : 45.61°F
-Charlotte                : 42.35°F
-New York                 : 41.94°F
-Nashville                : 41.87°F
-Philadelphia             : 41.47°F
-Boston                   : 38.68°F
-Louisville               : 36.80°F
-Indianapolis             : 35.87°F
-Detroit                  : 34.26°F
-Columbus                 : 33.67°F
-Chicago                  : 32.52°F
+Los Angeles              : 74.24°F
+San Diego                : 73.37°F
+Phoenix                  : 70.95°F
+Las Vegas                : 67.21°F
+Austin                   : 67.14°F
+San Antonio              : 66.31°F
+Houston                  : 66.27°F
+Denver                   : 64.06°F
+Fort Worth               : 63.37°F
+Dallas                   : 63.02°F
+Jacksonville             : 61.94°F
+Portland                 : 58.01°F
+San Francisco            : 52.32°F
+Memphis                  : 49.18°F
+Charlotte                : 47.94°F
+Seattle                  : 46.70°F
+Nashville                : 41.02°F
+Philadelphia             : 35.76°F
+New York                 : 35.76°F
+Louisville               : 33.52°F
+Boston                   : 32.58°F
+Columbus                 : 30.81°F
+Indianapolis             : 29.95°F
+Detroit                  : 28.26°F
+Chicago                  : 27.50°F
 
 ==================================================
 AVERAGE UV INDEX BY CITY
 ==================================================
-Seattle: 0.44
-Portland: 0.57
-New York: 0.66
-Boston: 0.87
-San Francisco: 1.06
-Detroit: 1.16
-Denver: 1.26
-Chicago: 1.28
-Philadelphia: 1.31
-Las Vegas: 1.40
-Los Angeles: 1.50
-Columbus: 1.57
-Indianapolis: 1.57
-San Diego: 1.79
-Louisville: 1.84
-Phoenix: 1.90
-Charlotte: 2.12
-Nashville: 2.15
-Memphis: 2.43
-Dallas: 2.73
-Fort Worth: 2.73
-Jacksonville: 2.94
+Boston: 0.59
+Seattle: 0.64
+New York: 0.78
+Portland: 0.80
+Philadelphia: 0.91
+Detroit: 0.92
+Chicago: 1.07
+Columbus: 1.23
+Indianapolis: 1.34
+Denver: 1.36
+Louisville: 1.45
+San Francisco: 1.51
+Charlotte: 1.64
+Nashville: 1.73
+Las Vegas: 1.77
+Los Angeles: 2.03
+Memphis: 2.11
+Phoenix: 2.19
+San Diego: 2.21
+Jacksonville: 2.29
+Dallas: 2.55
+Fort Worth: 2.55
 Austin: 3.05
-Houston: 3.34
+Houston: 3.15
 San Antonio: 3.51
 
 ==================================================
 AVERAGE AQI CALCULATIONS
 ==================================================
 
-Overall Average AQI: 1.68
+Overall Average AQI: 1.16
 
 Average AQI by City:
 ----------------------------------------
+New York                 : 1.00
 Chicago                  : 1.00
+Houston                  : 1.00
+Philadelphia             : 1.00
 San Antonio              : 1.00
 Dallas                   : 1.00
 Austin                   : 1.00
 Jacksonville             : 1.00
 Fort Worth               : 1.00
+Columbus                 : 1.00
+Charlotte                : 1.00
+Indianapolis             : 1.00
 Seattle                  : 1.00
+Denver                   : 1.00
+Boston                   : 1.00
+Nashville                : 1.00
 Detroit                  : 1.00
 Portland                 : 1.00
 Las Vegas                : 1.00
-Indianapolis             : 1.67
-San Francisco            : 1.67
-New York                 : 2.00
-Houston                  : 2.00
+Memphis                  : 1.00
+Louisville               : 1.00
+Los Angeles              : 2.00
 Phoenix                  : 2.00
-Philadelphia             : 2.00
-Columbus                 : 2.00
-Denver                   : 2.00
-Boston                   : 2.00
-Nashville                : 2.00
-Memphis                  : 2.00
-Louisville               : 2.00
-San Diego                : 2.67
-Charlotte                : 2.67
-Los Angeles              : 3.33
+San Diego                : 2.00
+San Francisco            : 2.00
 
 ==================================================
 OUTDOOR ACTIVITY SAFETY SCORES
@@ -105,28 +105,28 @@ OUTDOOR ACTIVITY SAFETY SCORES
 
 Rank   City                      Safety Score   
 --------------------------------------------------
-1      Austin                    0.1958
-2      Las Vegas                 0.2109
-3      San Antonio               0.2116
-4      Phoenix                   0.2338
-5      San Diego                 0.2351
-6      Portland                  0.2377
-7      Houston                   0.2388
-8      Jacksonville              0.2488
-9      Seattle                   0.2566
-10     Los Angeles               0.2635
-11     San Francisco             0.3255
-12     Dallas                    0.3625
-13     Fort Worth                0.3788
-14     Memphis                   0.3971
-15     Denver                    0.4023
-16     New York                  0.4304
-17     Philadelphia              0.4513
-18     Detroit                   0.4531
-19     Boston                    0.4684
-20     Nashville                 0.4684
-21     Chicago                   0.4733
-22     Indianapolis              0.4918
-23     Charlotte                 0.5072
-24     Louisville                0.5114
-25     Columbus                  0.5360
+1      Las Vegas                 0.1389
+2      Denver                    0.1601
+3      Austin                    0.1715
+4      Houston                   0.1827
+5      San Antonio               0.1914
+6      Fort Worth                0.1968
+7      Phoenix                   0.1977
+8      Dallas                    0.2004
+9      Jacksonville              0.2045
+10     Portland                  0.2067
+11     San Diego                 0.2224
+12     Los Angeles               0.2265
+13     Seattle                   0.3156
+14     Memphis                   0.3276
+15     Charlotte                 0.3282
+16     San Francisco             0.3480
+17     Nashville                 0.3997
+18     New York                  0.4287
+19     Philadelphia              0.4317
+20     Boston                    0.4555
+21     Louisville                0.4678
+22     Columbus                  0.4892
+23     Indianapolis              0.5007
+24     Detroit                   0.5071
+25     Chicago                   0.5185
